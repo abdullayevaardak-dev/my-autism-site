@@ -2,131 +2,133 @@ import streamlit as st
 import sqlite3
 from datetime import datetime
 import pandas as pd
-from fpdf import FPDF # Библиотека для создания PDF
-import base64
 
 # --- НАСТРОЙКИ СТРАНИЦЫ ---
 st.set_page_config(page_title="Спектр-Помощь PRO", page_icon="🧩", layout="wide")
 
-# --- БАЗА ДАННЫХ ---
+# --- РАБОТА С БАЗОЙ ДАННЫХ ---
 def init_db():
-    conn = sqlite3.connect('school_v2.db')
+    conn = sqlite3.connect('school_v3.db')
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS results 
-                 (date TEXT, teacher TEXT, child_id TEXT, score INTEGER, interpretation TEXT)''')
+                 (date TEXT, teacher TEXT, child_id TEXT, score INTEGER, report TEXT)''')
     conn.commit()
     conn.close()
 
-def save_result(teacher, child_id, score, text):
-    conn = sqlite3.connect('school_v2.db')
+def save_to_db(teacher, child_id, score, report):
+    conn = sqlite3.connect('school_v3.db')
     c = conn.cursor()
-    now = datetime.now().strftime("%Y-%m-%d %H:%M")
-    c.execute("INSERT INTO results VALUES (?, ?, ?, ?, ?)", (now, teacher, child_id, score, text))
+    now = datetime.now().strftime("%d.%m.%Y %H:%M")
+    c.execute("INSERT INTO results VALUES (?, ?, ?, ?, ?)", (now, teacher, child_id, score, report))
     conn.commit()
     conn.close()
 
-# --- ФУНКЦИЯ ПЕЧАТИ В PDF ---
-def create_pdf(child_id, teacher, score, text):
-    pdf = FPDF()
-    pdf.add_page()
-    # Добавляем шрифт, поддерживающий кириллицу (убедитесь, что он есть в папке или используйте стандартный)
-    pdf.set_font("Arial", size=12)
-    
-    pdf.cell(200, 10, txt="Результаты скрининга «Спектр-Помощь»", ln=True, align='C')
-    pdf.ln(10)
-    pdf.cell(200, 10, txt=f"Дата: {datetime.now().strftime('%d.%m.%Y')}", ln=True)
-    pdf.cell(200, 10, txt=f"Учитель: {teacher}", ln=True)
-    pdf.cell(200, 10, txt=f"Ученик (ID): {child_id}", ln=True)
-    pdf.cell(200, 10, txt=f"Общий балл: {score}", ln=True)
-    pdf.ln(10)
-    pdf.multi_cell(0, 10, txt=f"Заключение ИИ-помощника: \n{text}")
-    pdf.ln(20)
-    pdf.cell(200, 10, txt="Подпись педагога: ________________", ln=True)
-    
-    return pdf.output(dest='S').encode('latin-1', 'replace') # Упрощенная кодировка для примера
-
-# --- ИНИЦИАЛИЗАЦИЯ ---
 init_db()
 
-# --- ЛОГИН (АККАУНТ УЧИТЕЛЯ) ---
-if 'auth' not in st.session_state:
-    st.session_state.auth = False
+# --- СИСТЕМА АВТОРИЗАЦИИ ---
+if 'logged_in' not in st.session_state:
+    st.session_state.logged_in = False
 
 with st.sidebar:
-    st.header("🔑 Вход в систему")
-    if not st.session_state.auth:
+    st.title("🔑 Авторизация")
+    if not st.session_state.logged_in:
         user = st.text_input("Логин (Фамилия)")
-        pwd = st.text_input("Пароль", type="password")
+        password = st.text_input("Пароль", type="password")
         if st.button("Войти"):
-            if pwd == "12345": # Простой пароль для теста
-                st.session_state.auth = True
-                st.session_state.user = user
-                st.success(f"Добро пожаловать, {user}!")
+            if password == "12345": # Можно поменять на свой
+                st.session_state.logged_in = True
+                st.session_state.teacher = user
                 st.rerun()
             else:
                 st.error("Неверный пароль")
     else:
-        st.write(f"Вы вошли как: **{st.session_state.user}**")
+        st.success(f"Педагог: {st.session_state.teacher}")
         if st.button("Выйти"):
-            st.session_state.auth = False
+            st.session_state.logged_in = False
             st.rerun()
 
-# --- ОСНОВНОЙ КОНТЕНТ (только если залогинены) ---
-if st.session_state.auth:
-    st.title("🧩 Рабочее место педагога")
+# --- ОСНОВНОЙ МОДУЛЬ ---
+if st.session_state.logged_in:
+    st.title("🧩 Скрининг-система «Спектр-Помощь»")
     
-    tab1, tab2 = st.tabs(["📝 Новое обследование", "📅 Журнал и Печать"])
+    tab1, tab2 = st.tabs(["📋 Провести скрининг", "📜 Журнал и Отчеты"])
 
     with tab1:
-        child_id = st.text_input("ID Ученика", "Ученик-01")
+        child_id = st.text_input("Ученик (Код или ФИО)", "Ученик-01")
+        st.info("Инструкция: Отметьте утверждения, проявляющиеся регулярно в течение последних 6 месяцев.")
         
-        # Блок вопросов (те самые 12 вопросов из анкеты)
-        st.subheader("Скрининг-анкета")
-        col1, col2 = st.columns(2)
+        col1, col2, col3 = st.columns(3)
+        
         with col1:
-            s_checks = [st.checkbox(f"Вопрос соц. блок {i+1}") for i in range(4)]
-            c_checks = [st.checkbox(f"Вопрос речь блок {i+1}") for i in range(4)]
+            st.subheader("1. Социализация")
+            s1 = st.checkbox("Необычный визуальный контакт")
+            s2 = st.checkbox("Предпочитает одиночество")
+            s3 = st.checkbox("Не понимает личных границ")
+            s4 = st.checkbox("Не делится радостями")
+            
         with col2:
-            p_checks = [st.checkbox(f"Вопрос сенсорика блок {i+1}") for i in range(4)]
+            st.subheader("2. Коммуникация")
+            c1 = st.checkbox("Эхолалия (цитаты/повторы)")
+            c2 = st.checkbox("Роботизированная речь")
+            c3 = st.checkbox("Буквальное понимание слов")
+            c4 = st.checkbox("Трудности с инициацией разговора")
+            
+        with col3:
+            st.subheader("3. Поведение")
+            p1 = st.checkbox("Острая реакция на шумы")
+            p2 = st.checkbox("Избирательность в еде")
+            p3 = st.checkbox("Повторяющиеся движения")
+            p4 = st.checkbox("Стресс при переменах")
 
-        if st.button("📈 Рассчитать и Сохранить"):
-            total_score = sum(s_checks + c_checks + p_checks)
+        if st.button("🚀 Анализ ИИ и сохранение"):
+            score = sum([s1, s2, s3, s4, c1, c2, c3, c4, p1, p2, p3, p4])
             
-            # Логика ИИ
-            if total_score >= 7: interpretation = "ВЫСОКИЙ РИСК. Требуется консультация ПМПК."
-            elif total_score >= 4: interpretation = "СРЕДНИЙ РИСК. Рекомендуется школьный психолог."
-            else: interpretation = "НИЗКИЙ РИСК. Особенности поведения не критичны."
+            # Генерация рекомендаций ИИ
+            if score >= 7:
+                res = "ВЫСОКИЙ РИСК. Рекомендуется ПМПК. Психологу: углубленная диагностика. Родителям: консультация психиатра."
+            elif score >= 4:
+                res = "СРЕДНИЙ РИСК. Рекомендуется адаптация среды (тихая зона, визуальное расписание). Наблюдение психолога."
+            else:
+                res = "НИЗКИЙ РИСК. Выраженных маркеров нет. Рекомендовано развитие социальных навыков в общей группе."
             
-            save_result(st.session_state.user, child_id, total_score, interpretation)
-            st.success("Результат занесен в базу данных!")
-            st.info(interpretation)
+            full_report = f"Результат: {res}\n\nРекомендации: Снизить сенсорную нагрузку, использовать карточки-подсказки."
+            
+            save_to_db(st.session_state.teacher, child_id, score, full_report)
+            st.success("Данные успешно сохранены в базе!")
+            st.subheader("Заключение ИИ:")
+            st.write(full_report)
 
     with tab2:
         st.subheader("Архив обследований")
-        conn = sqlite3.connect('school_v2.db')
+        conn = sqlite3.connect('school_v3.db')
         df = pd.read_sql_query("SELECT * FROM results", conn)
         conn.close()
-        
+
         if not df.empty:
-            st.dataframe(df)
+            st.dataframe(df, use_container_width=True)
             
-            # Выбор записи для печати
-            st.write("---")
-            st.write("### 🖨 Подготовка отчета для печати")
-            row_to_print = st.selectbox("Выберите ID ребенка из базы", df['child_id'].unique())
+            st.divider()
+            st.subheader("🖨 Подготовка к печати")
+            record_id = st.selectbox("Выберите ребенка для выгрузки отчета", df['child_id'].unique())
             
-            if st.button("Сгенерировать PDF для печати"):
-                # Берем последнюю запись для этого ребенка
-                child_data = df[df['child_id'] == row_to_print].iloc[-1]
-                pdf_bytes = create_pdf(child_data['child_id'], child_data['teacher'], child_data['score'], child_data['interpretation'])
-                
-                st.download_button(
-                    label="📥 Скачать PDF отчет",
-                    data=pdf_bytes,
-                    file_name=f"Otchet_{row_to_print}.pdf",
-                    mime="application/pdf"
-                )
+            if st.button("Сформировать документ"):
+                row = df[df['child_id'] == record_id].iloc[-1]
+                report_text = f"""
+                ОТЧЕТ ПО РЕЗУЛЬТАТАМ СКРИНИНГА
+                Дата: {row['date']}
+                Учитель: {row['teacher']}
+                Ученик: {row['child_id']}
+                Баллы: {row['score']} из 12
+                -----------------------------------
+                ЗАКЛЮЧЕНИЕ И РЕКОМЕНДАЦИИ:
+                {row['report']}
+                -----------------------------------
+                Подпись: _________________
+                """
+                st.text_area("Готовый текст для копирования в Word/Печати:", report_text, height=250)
+                st.download_button("📥 Скачать текстовый файл", report_text.encode('utf-8-sig'), f"{record_id}.txt")
         else:
-            st.write("Записей пока нет.")
+            st.write("История пуста.")
+
 else:
-    st.warning("Пожалуйста, авторизуйтесь через боковую панель.")
+    st.warning("Войдите в систему в боковой панели, чтобы начать работу.")
