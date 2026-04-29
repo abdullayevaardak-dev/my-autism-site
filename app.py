@@ -3,24 +3,14 @@ import sqlite3
 from datetime import datetime
 import pandas as pd
 
-# --- НАСТРОЙКИ ---
+# --- ИНИЦИАЛИЗАЦИЯ ---
 st.set_page_config(page_title="Спектр-Помощь: Консилиум", page_icon="🧩", layout="wide")
 
-# --- БАЗА ДАННЫХ ---
 def init_db():
-    conn = sqlite3.connect('school_consilium.db')
+    conn = sqlite3.connect('school_final_consilium.db')
     c = conn.cursor()
-    # Таблица результатов: хранит специализацию, кто заполнил, ID ребенка и сами ответы
     c.execute('''CREATE TABLE IF NOT EXISTS reports 
-                 (date TEXT, specialist_type TEXT, name TEXT, child_id TEXT, score INTEGER, details TEXT)''')
-    conn.commit()
-    conn.close()
-
-def save_data(spec, name, child, score, details):
-    conn = sqlite3.connect('school_consilium.db')
-    c = conn.cursor()
-    now = datetime.now().strftime("%d.%m.%Y %H:%M")
-    c.execute("INSERT INTO reports VALUES (?, ?, ?, ?, ?, ?)", (now, spec, name, child, score, details))
+                 (date TEXT, role TEXT, teacher_name TEXT, child_id TEXT, score INTEGER, summary TEXT)''')
     conn.commit()
     conn.close()
 
@@ -31,16 +21,16 @@ if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 
 with st.sidebar:
-    st.header("🔑 Вход в систему")
+    st.header("🔑 Вход")
     if not st.session_state.logged_in:
         role = st.selectbox("Ваша роль:", ["Учитель", "Психолог", "Логопед", "Дефектолог"])
-        user_name = st.text_input("Ваша Фамилия")
+        name = st.text_input("Фамилия специалиста")
         pwd = st.text_input("Пароль", type="password")
         if st.button("Войти"):
             if pwd == "12345":
                 st.session_state.logged_in = True
                 st.session_state.role = role
-                st.session_state.user = user_name
+                st.session_state.user = name
                 st.rerun()
     else:
         st.success(f"{st.session_state.role}: {st.session_state.user}")
@@ -48,104 +38,128 @@ with st.sidebar:
             st.session_state.logged_in = False
             st.rerun()
 
-# --- ОСНОВНОЙ КОНТЕНТ ---
+# --- ОСНОВНОЙ МОДУЛЬ ---
 if st.session_state.logged_in:
-    st.title(f"🧩 Рабочее место: {st.session_state.role}")
-    
-    tabs = st.tabs(["📝 Заполнить тест", "📋 Сводная ведомость", "📁 Архив"])
+    st.title(f"🧩 Рабочее пространство: {st.session_state.role}")
+    tabs = st.tabs(["📝 Провести тест", "📋 Консилиум (Сводка)", "📁 Архив"])
 
     with tabs[0]:
-        child_id = st.text_input("ID или ФИО ребенка", "Иванов Иван")
-        st.divider()
+        child_id = st.text_input("Идентификатор ученика (ФИО/Код)", "Ученик-01")
+        st.write("---")
+        
+        current_score = 0
+        report_parts = []
 
-        # ДИНАМИЧЕСКАЯ АНКЕТА В ЗАВИСИМОСТИ ОТ РОЛИ
-        score = 0
-        details = ""
-
+        # 1. АНКЕТА УЧИТЕЛЯ (твои 12 вопросов)
         if st.session_state.role == "Учитель":
-            st.subheader("Скрининг классного руководителя")
-            q1 = st.checkbox("Избегает визуального контакта")
-            q2 = st.checkbox("Предпочитает одиночество")
-            q3 = st.checkbox("Нарушает границы / Реакция на касания")
-            q4 = st.checkbox("Трудности с переменами в расписании")
-            score = sum([q1, q2, q3, q4])
-            details = f"Соц. взаимодействие: {score}/4"
+            st.subheader("Скрининг-анкета для классного руководителя")
+            with st.expander("1. Социальное взаимодействие", expanded=True):
+                q1 = st.checkbox("Необычный визуальный контакт (взгляд «сквозь»)")
+                q2 = st.checkbox("Предпочитает одиночество; нет интереса к сверстникам")
+                q3 = st.checkbox("Не понимает личных границ (касания/близость)")
+                q4 = st.checkbox("Редко делится радостями/достижениями с классом")
+            with st.expander("2. Коммуникация и речь", expanded=True):
+                q5 = st.checkbox("Использует цитаты/повторы (эхолалия)")
+                q6 = st.checkbox("Речь «роботизированная» или необычная интонация")
+                q7 = st.checkbox("Буквальное понимание (не понимает шутки/сарказм)")
+                q8 = st.checkbox("Трудности с инициацией разговора/просьбой")
+            with st.expander("3. Сенсорика и поведение", expanded=True):
+                q9 = st.checkbox("Острая реакция на шумы (звонок, столовая)")
+                q10 = st.checkbox("Избирательность в еде")
+                q11 = st.checkbox("Повторяющиеся движения (взмахи, раскачивания)")
+                q12 = st.checkbox("Стресс при изменении расписания")
+            current_score = sum([q1,q2,q3,q4,q5,q6,q7,q8,q9,q10,q11,q12])
+            report_parts.append(f"Выявлено {current_score} из 12 маркеров поведения.")
 
+        # 2. АНКЕТА ПСИХОЛОГА (твои 14 вопросов)
         elif st.session_state.role == "Психолог":
-            st.subheader("Диагностика психолога")
-            p1 = st.checkbox("Сенсорная гиперчувствительность (шум/свет)")
-            p2 = st.checkbox("Наличие стереотипных движений (стимминг)")
-            p3 = st.checkbox("Трудности с пониманием эмоций других")
-            p4 = st.checkbox("Высокий уровень тревожности")
-            score = sum([p1, p2, p3, p4])
-            details = f"Психоэмоц. сфера: {score}/4"
+            st.subheader("Общий скрининг-тест психолога")
+            with st.expander("Блок 1-2: Эмоции и Коммуникация"):
+                p1 = st.checkbox("Нарушение зрительного контакта")
+                p2 = st.checkbox("Отсутствие разделенного внимания")
+                p3 = st.checkbox("Несоответствующий эмоциональный отклик")
+                p4 = st.checkbox("Трудности понимания эмоций по лицам")
+                p5 = st.checkbox("Речь только для просьб (нет спонтанной речи)")
+                p6 = st.checkbox("Трудности выполнения инструкций")
+                p7 = st.checkbox("Необычная интонация (монотонность)")
+                p8 = st.checkbox("Буквальное понимание метафор")
+            with st.expander("Блок 3-4: Мышление и Поведение"):
+                p9 = st.checkbox("Трудности обобщения (категории)")
+                p10 = st.checkbox("Ошибки в 'Четвертый лишний'")
+                p11 = st.checkbox("Нарушение причинно-следственных связей")
+                p12 = st.checkbox("Наличие стереотипий (стимминг)")
+                p13 = st.checkbox("Сенсорный поиск/избегание")
+                p14 = st.checkbox("Высокая тревожность при переменах")
+            current_score = sum([p1,p2,p3,p4,p5,p6,p7,p8,p9,p10,p11,p12,p13,p14])
+            report_parts.append(f"Психологический риск: {current_score} из 14.")
 
+        # 3. АНКЕТА ЛОГОПЕДА
         elif st.session_state.role == "Логопед":
-            st.subheader("Логопедическое обследование")
-            l1 = st.checkbox("Наличие эхолалий (повторов)")
-            l2 = st.checkbox("Речь монотонная/роботизированная")
-            l3 = st.checkbox("Буквальное понимание (не понимает шуток)")
-            l4 = st.checkbox("Отсутствие коммуникативной инициативы")
-            score = sum([l1, l2, l3, l4])
-            details = f"Речевая сфера: {score}/4"
+            st.subheader("Логопедический скрининг")
+            l1 = st.checkbox("Эхолалии (повторы)")
+            l2 = st.checkbox("Смешение местоимений (Я/Он)")
+            l3 = st.checkbox("Монотонный/роботизированный темп")
+            l4 = st.checkbox("Нет инициативы в диалоге")
+            l5 = st.checkbox("Трудности сложной инструкции")
+            l6 = st.checkbox("Не понимает прагматику (скрытый смысл)")
+            current_score = sum([l1,l2,l3,l4,l5,l6])
+            report_parts.append(f"Речевые дефициты: {current_score} из 6.")
 
+        # 4. АНКЕТА ДЕФЕКТОЛОГА
         elif st.session_state.role == "Дефектолог":
-            st.subheader("Дефектологическое обследование")
+            st.subheader("Дефектологический скрининг")
             d1 = st.checkbox("Трудности имитации движений")
-            d2 = st.checkbox("Слабая переключаемость внимания")
-            d3 = st.checkbox("Трудности обобщения (логика)")
-            d4 = st.checkbox("Нарушение пространственного восприятия")
-            score = sum([d1, d2, d3, d4])
-            details = f"Когнитивная сфера: {score}/4"
+            d2 = st.checkbox("Слабая зрительно-моторная координация")
+            d3 = st.checkbox("Трудности с предлогами (пространство)")
+            d4 = st.checkbox("Низкая переключаемость внимания")
+            d5 = st.checkbox("Трудности классификации объектов")
+            d6 = st.checkbox("Нарушение логических связей")
+            current_score = sum([d1,d2,d3,d4,d5,d6])
+            report_parts.append(f"Когнитивные дефициты: {current_score} из 6.")
 
-        if st.button("💾 Сохранить результат"):
-            save_data(st.session_state.role, st.session_state.user, child_id, score, details)
-            st.success("Данные успешно добавлены в общую базу!")
+        if st.button("💾 Сохранить в общую базу"):
+            summary = " ".join(report_parts)
+            conn = sqlite3.connect('school_final_consilium.db')
+            c = conn.cursor()
+            now = datetime.now().strftime("%d.%m.%Y %H:%M")
+            c.execute("INSERT INTO reports VALUES (?, ?, ?, ?, ?, ?)", 
+                      (now, st.session_state.role, st.session_state.user, child_id, current_score, summary))
+            conn.commit()
+            conn.close()
+            st.success(f"Данные по ученику {child_id} сохранены!")
 
     with tabs[1]:
-        st.subheader("🔍 Формирование общего заключения (Консилиум)")
-        all_children = pd.read_sql_query("SELECT DISTINCT child_id FROM reports", sqlite3.connect('school_consilium.db'))
-        target_child = st.selectbox("Выберите ребенка для сводки", all_children)
-
-        if st.button("🤖 Собрать данные и запустить ИИ-анализ"):
-            conn = sqlite3.connect('school_consilium.db')
-            child_data = pd.read_sql_query("SELECT * FROM reports WHERE child_id = ?", conn, params=(target_child,))
-            conn.close()
-
-            if not child_data.empty:
-                st.markdown(f"### Сводная таблица по ребенку: {target_child}")
-                st.table(child_data[['date', 'specialist_type', 'name', 'details']])
+        st.subheader("🔍 Сводная ведомость консилиума")
+        conn = sqlite3.connect('school_final_consilium.db')
+        all_data = pd.read_sql_query("SELECT * FROM reports", conn)
+        conn.close()
+        
+        if not all_data.empty:
+            target_child = st.selectbox("Выберите ребенка", all_data['child_id'].unique())
+            if st.button("🤖 Сформировать общий отчет ИИ"):
+                child_results = all_data[all_data['child_id'] == target_child]
+                st.table(child_results[['date', 'role', 'teacher_name', 'summary']])
                 
-                total_points = child_data['score'].sum()
-                specs_involved = child_data['specialist_type'].unique()
-
+                total_sum = child_results['score'].sum()
+                
                 st.divider()
-                st.subheader("📢 Комплексная рекомендация ИИ")
-                
-                # ЛОГИКА ИИ КОНСИЛИУМА
-                analysis = f"В обследовании участвовали: {', '.join(specs_involved)}. "
-                if total_points >= 10:
-                    rec = "ВЫСОКИЙ РИСК РАС. Требуется направление на ПМПК. Рекомендована разработка ИОП (Индивидуальной образовательной программы) с участием всех специалистов."
-                elif total_points >= 5:
-                    rec = "СРЕДНИЙ РИСК. Требуется внутренняя поддержка школы: коррекционные занятия с логопедом и психологом 2 раза в неделю."
+                st.subheader("📢 Комплексное заключение ИИ")
+                if total_sum >= 15:
+                    ai_rec = "ВЫСОКИЙ УРОВЕНЬ РИСКА. Требуется направление на ПМПК. Рекомендовано тьюторское сопровождение и АОП."
+                elif total_sum >= 7:
+                    ai_rec = "СРЕДНИЙ УРОВЕНЬ РИСКА. Рекомендованы занятия в ресурсном классе, работа с логопедом и психологом."
                 else:
-                    rec = "НИЗКИЙ РИСК. Рекомендовано наблюдение в динамике и работа над социальными навыками в группе."
+                    ai_rec = "НИЗКИЙ УРОВЕНЬ РИСКА. Рекомендовано наблюдение и социальные тренинги."
                 
-                full_text = f"**Анализ:** {analysis}\n\n**Заключение:** {rec}"
-                st.info(full_text)
-                
-                # Кнопка для скачивания
-                report_file = f"СВОДНАЯ ВЕДОМОСТЬ: {target_child}\n\n{full_text}\n\nДата: {datetime.now()}"
-                st.download_button("📥 Скачать общую ведомость (TXT)", report_file.encode('utf-8-sig'), f"Consilium_{target_child}.txt")
-            else:
-                st.error("По этому ребенку еще нет данных.")
+                final_text = f"Общий балл по всем специалистам: {total_sum}\n\nЗАКЛЮЧЕНИЕ: {ai_rec}"
+                st.info(final_text)
+                st.download_button("📥 Скачать ведомость", final_text.encode('utf-8-sig'), f"Consilium_{target_child}.txt")
+        else:
+            st.write("База данных пуста.")
 
     with tabs[2]:
-        st.subheader("Полный архив базы данных")
-        conn = sqlite3.connect('school_consilium.db')
-        df_all = pd.read_sql_query("SELECT * FROM reports", conn)
-        conn.close()
-        st.dataframe(df_all, use_container_width=True)
+        st.subheader("Полный архив")
+        st.dataframe(all_data)
 
 else:
-    st.warning("Пожалуйста, войдите в систему.")
+    st.warning("Пожалуйста, войдите в систему в боковой панели.")
