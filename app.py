@@ -1,198 +1,103 @@
 import streamlit as st
-import sqlite3
-from datetime import datetime
 import pandas as pd
+from sqlalchemy import create_engine, text
+from datetime import datetime
 
 # --- НАСТРОЙКА СТРАНИЦЫ ---
-st.set_page_config(page_title="Спектр-Помощь: Учитель", page_icon="📝", layout="wide")
+st.set_page_config(page_title="Спектр-Помощь: Консилиум ПМПК", page_icon="🧩", layout="wide")
 
-# --- БАЗА ДАННЫХ ---
+# --- ПОДКЛЮЧЕНИЕ К SUPABASE (ОБЛАКО) ---
+@st.cache_resource
+def init_connection():
+    # Берет ссылку из файла .streamlit/secrets.toml или настроек Streamlit Cloud
+    return create_engine(st.secrets["DATABASE_URL"])
+
+engine = init_connection()
+
 def init_db():
-    conn = sqlite3.connect('school_consilium_v10.db')
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS teacher_reports 
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  date TEXT, 
-                  teacher_name TEXT, 
-                  child_id TEXT, 
-                  asd_score INTEGER,
-                  adhd_score INTEGER,
-                  details TEXT,
-                  adhd_details TEXT,
-                  asd_notes TEXT,
-                  adhd_notes TEXT,
-                  lang TEXT)''')
-    conn.commit()
-    conn.close()
+    with engine.begin() as conn:
+        # Создаем таблицы в PostgreSQL, если их нет
+        conn.execute(text('''CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password TEXT, role TEXT)'''))
+        conn.execute(text('''CREATE TABLE IF NOT EXISTS teacher_reports 
+                     (id SERIAL PRIMARY KEY, date TEXT, teacher_name TEXT, child_id TEXT, 
+                      asd_score INTEGER, adhd_score INTEGER, details TEXT, adhd_details TEXT, notes TEXT, lang TEXT)'''))
+        conn.execute(text('''CREATE TABLE IF NOT EXISTS psychologist_reports 
+                     (id SERIAL PRIMARY KEY, date TEXT, psych_name TEXT, child_id TEXT, 
+                      total_score INTEGER, details TEXT, notes TEXT, lang TEXT)'''))
+        conn.execute(text('''CREATE TABLE IF NOT EXISTS speech_reports 
+                     (id SERIAL PRIMARY KEY, date TEXT, speech_name TEXT, child_id TEXT, 
+                      total_score INTEGER, details TEXT, notes TEXT, lang TEXT)'''))
+        conn.execute(text('''CREATE TABLE IF NOT EXISTS defect_reports 
+                     (id SERIAL PRIMARY KEY, date TEXT, defect_name TEXT, child_id TEXT, 
+                      total_score INTEGER, details TEXT, notes TEXT, lang TEXT)'''))
 
 init_db()
 
-# --- МУЛЬТИЯЗЫЧНЫЙ СЛОВАРЬ ДАННЫХ И ТЕСТОВ ---
+# --- МУЛЬТИЯЗЫЧНЫЙ СЛОВАРЬ ---
 LANG_DATA = {
     'Русский': {
-        'title': "🧩 Спектр-Помощь: Кабинет Учителя",
-        'sidebar_rec': "💡 Рекомендации для учителя",
+        'site_title': "ЦППМСП «Спектр-Помощь»",
+        'site_subtitle': "Единая цифровая платформа психолого-медико-педагогического консилиума",
         'tab_survey': "📝 Новое обследование",
-        'tab_report': "📄 Отчет и Родителям",
-        'tab_history': "📁 История записей",
+        'tab_report': "📋 Комплексный отчет ПМПК",
+        'tab_history': "📁 Архив записей",
         'child_label': "Код ученика (для анонимности)",
         'child_placeholder': "Например: 1А01",
         'date_label': "Дата обследования",
-        'save_btn': "💾 Сохранить обследование",
-        'asd_title': "📋 Тест на РАС (Аутизм)",
-        'adhd_title': "📋 Тест на СДВГ",
-        'report_gen': "🤖 Сформировать отчет и рекомендации",
-        'parent_rec_title': "👨‍👩‍👧 Рекомендации для родителей",
-        'behavior_desc': "Характеристика поведения ученика",
-        'notes_asd_label': "✍️ Дополнительные наблюдения учителя по сфере РАС:",
-        'notes_adhd_label': "✍️ Дополнительные наблюдения учителя по сфере СДВГ:",
-        'placeholder_notes': "Введите текст наблюдений...",
-        'auth_title': "Авторизация",
-        'auth_name': "Ваша Фамилия",
-        'auth_pwd': "Пароль",
-        'auth_btn': "Войти",
-        'select_child_label': "Выберите код ученика для генерации отчета",
+        'save_btn': "💾 Сохранить данные специалиста",
+        'report_gen': "🤖 Сформировать заключение ПМПК",
+        'auth_title': "Авторизация специалиста",
+        'auth_role': "Выберите вашу роль:",
+        'auth_name': "Ваша Фамилия и Инициалы",
+        'auth_pwd': "Ваш личный пароль",
+        'auth_btn': "Войти в систему",
+        'extra_notes_label': "✍️ Дополнительные экспертные наблюдения:",
+        'placeholder_notes': "Введите информацию, которая не вошла в чек-лист...",
         
-        # Сектора РАС
-        'asd_sec1': "🗣 Особенности коммуникации и речи",
-        'asd_sec2': "🤝 Социальное взаимодействие",
-        'asd_sec3': "🎒 Поведение и учебный процесс",
-        'asd_sec4': "⚡ Сенсорные реакции",
+        # Логопед
+        'logo_title': "🗣 Кабинет Логопеда (Речевая карта)",
+        'logo_secs': ["1️⃣ Звукопроизношение и артикуляция", "2️⃣ Слоговая структура", "3️⃣ Фонематические процессы", "4️⃣ Лексико-грамматический строй", "5️⃣ Темпо-ритмическая организация"],
+        'logo_q': ["Нарушения звукопроизношения", "Нарушения артикуляционной моторики", "Искажение слоговой структуры", "Нарушение фонематического слуха", "Трудности звукового анализа", "Бедный словарный запас", "Аграмматизмы", "Нарушение связной речи", "Темпо-ритмические нарушения"],
         
-        # Вопросы РАС
-        'asd_q': [
-            "Игнорирование обращений (не отзывается на имя при хорошем слухе)",
-            "Эхолалия (бесконтрольное повторение чужих слов/цитат вместо спонтанной речи)",
-            "Буквальное понимание (невосприимчивость к метафорам, сарказму, шуткам)",
-            "Специфический тон (монотонная, 'роботизированная' или слишком взрослая речь)",
-            "Трудности с диалогом (говорит сам, но не слушает собеседника)",
-            
-            "Избегание зрительного контакта (смотрит 'сквозь' или отводит глаза)",
-            "Проблемы с границами (игнорирует дистанцию или боится прикосновений)",
-            "Одиночество на переменах (не играет, держится в стороне)",
-            "Трудности с правилами игры (не понимает негласных норм, не умеет ждать очереди)",
-            "Нетипичная мимика (выражение лица не соответствует ситуации или как маска)",
-            
-            "Стереотипии/стимминг (взмахи руками 'крыльями', раскачивание, кручение предметов)",
-            "Протест против изменений (паника/агрессия при смене расписания, парты, учителя)",
-            "Узкие интересы (фанатичная увлеченность одной темой в ущерб урокам)",
-            "Особый порядок (перфекционизм в раскладывании вещей, сильная тревога при нарушении)",
-            
-            "Гиперчувствительность (закрывает уши при звонке, шуме стульев)",
-            "Избирательность в еде (ест только строго определенные продукты)",
-            "Дискомфорт от одежды (пытается снять форму, срезает колкие ярлыки)"
-        ],
-        
-        # Сектора СДВГ
-        'adhd_sec1': "🧠 Невнимательность (Дефицит внимания)",
-        'adhd_sec2': "🏃‍♂️ Гиперактивность (Избыточная моторная активность)",
-        'adhd_sec3': "⏱ Импульсивность (Неумение тормозить реакции)",
-        
-        # Вопросы СДВГ
-        'adhd_q': [
-            "Быстрая отвлекаемость (реагирует на любой шорох за окном/скрип двери)",
-            "Проблемы с инструкциями (не может выполнить задание из 3-4 шагов, забывает начало)",
-            "Постоянная потеря вещей (регулярно теряет ручки, ластики, тетради, забывает вещи)",
-            "Ошибки по «глупости» (из-за небрежности пропускает буквы, знаки препинания, цифры)",
-            "Избегание умственных усилий (оттягивает начало сложных, монотонных заданий)",
-            
-            "Физическая неусидчивость (постоянно крутится, сползает под парту, закидывает ноги)",
-            "Постоянные движения руками (вертит ручку, ломает карандаши, стучит пальцами)",
-            "Бесцельное хождение (может встать посреди урока, чтобы подойти к шкафу)",
-            "«Шумное» поведение (производит много лишних звуков, роняет предметы)",
-            "Проблемы на переменах (бегает на пределе скорости, врезается в людей и углы)",
-            
-            "Выкрикивание с места (отвечает до того, как учитель договорил вопрос)",
-            "Перебивание (постоянно встревает в разговоры учителя с другими или одноклассников)",
-            "Неумение ждать очереди (пытается всегда быть первым, протестует в очередях)",
-            "Слабый самоконтроль (сначала делает/говорит, потом думает, берет вещи без спроса)",
-            "Вспыльчивость (легко расстраивается, бурно реагирует на проигрыш или замечание)"
-        ]
+        # Дефектолог
+        'def_title': "🎓 Кабинет Дефектолога (Специального педагога)",
+        'def_secs': ["1️⃣ Зона ближайшего развития", "2️⃣ Высшие психические функции", "3️⃣ Сформированность представлений", "4️⃣ Академические навыки"],
+        'def_q': ["Низкая обучаемость", "Несформированность учебной/игровой деятельности", "Нарушение зрительного/слухового гнозиса", "Дефициты конструирования и праксиса", "Особенности мышления (классификация, логика)", "Незнание сенсорных эталонов", "Нарушение временных/пространственных ориентировок", "Трудности формирования чтения", "Нарушения письма (дисграфия)", "Нарушения счета (дискалькулия)"]
     },
     'Қазақша': {
-        'title': "🧩 Спектр-Көмек: Мұғалім кабинеті",
-        'sidebar_rec': "💡 Мұғалімге арналған ұсыныстар",
+        'site_title': "«Спектр-Көмек» ПМПҚ Орталығы",
+        'site_subtitle': "Психологиялық-медициналық-педагогикалық консилиумның бірыңғай цифрлық платформасы",
         'tab_survey': "📝 Жаңа тексеру",
-        'tab_report': "📄 Есеп және Ата-аналарға",
+        'tab_report': "📋 ПМПК кешенді есебі",
         'tab_history': "📁 Жазбалар архиві",
         'child_label': "Оқушы коды (анонимділік үшін)",
         'child_placeholder': "Мысалы: 1А01",
         'date_label': "Тексеру күні",
-        'save_btn': "💾 Тексеруді сақтау",
-        'asd_title': "📋 РАС (Аутизм) тесті",
-        'adhd_title': "📋 СДВГ тесті",
-        'report_gen': "🤖 Есеп пен ұсыныстарды дайындау",
-        'parent_rec_title': "👨‍👩‍👧 Ата-аналарға арналған ұсыныстар",
-        'behavior_desc': "Оқушының мінез-құлық сипаттамасы",
-        'notes_asd_label': "✍️ Мұғалімнің РАС бойынша қосымша бақылаулары:",
-        'notes_adhd_label': "✍️ Мұғалімнің СДВГ бойынша қосымша бақылаулары:",
-        'placeholder_notes': "Бақылау мәтінін енгізіңіз...",
-        'auth_title': "Авторизация",
-        'auth_name': "Тегіңіз",
-        'auth_pwd': "Құпия сөз",
-        'auth_btn': "Кіру",
-        'select_child_label': "Есеп беру үшін оқушы кодын таңдаңыз",
+        'save_btn': "💾 Мәліметтерді сақтау",
+        'report_gen': "🤖 ПМПК қорытындысын дайындау",
+        'auth_title': "Маманның авторизациясы",
+        'auth_role': "Рөліңізді таңдаңыз:",
+        'auth_name': "Тегіңіз бен аты-жөніңіз",
+        'auth_pwd': "Жеке құпия сөзіңіз",
+        'auth_btn': "Жүйеге кіру",
+        'extra_notes_label': "✍️ Маманның қосымша ескертулері:",
+        'placeholder_notes': "Ақпаратты енгізіңіз...",
         
-        # Сектора РАС
-        'asd_sec1': "🗣 Коммуникация және сөйлеу ерекшеліктері",
-        'asd_sec2': "🤝 Әлеуметтік өзара әрекеттесу",
-        'asd_sec3': "🎒 Мінез-құлық және оқу үрдісі",
-        'asd_sec4': "⚡ Сенсорлық реакциялар",
+        # Логопед (Қаз)
+        'logo_title': "🗣 Логопед кабинеті (Сөйлеу картасы)",
+        'logo_secs': ["1️⃣ Дыбыстың айтылуы", "2️⃣ Сөздің буындық құрылымы", "3️⃣ Фонематикалық үрдістер", "4️⃣ Лексика-грамматикалық құрылым", "5️⃣ Сөйлеу қарқыны"],
+        'logo_q': ["Дыбыстың айтылуындағы бұзылыстар", "Артикуляциялық моториканың бұзылуы", "Сөздің буындық құрылымын бұрмалау", "Фонематикалық есту қабілетінің бұзылуы", "Дыбыстық талдау қиындықтары", "Сөздік қордың жұтаңдығы", "Аграмматизмдер", "Байланыстырып сөйлеудің бұзылуы", "Сөйлеу қарқынының бұзылуы"],
         
-        # Вопросы РАС
-        'asd_q': [
-            "Өтініштерді елемеу (есту қабілеті дұрыс болса да, өз есіміне жауап бермейді)",
-            "Эхолалия (өздігінен сөйлеудің орнына басқалардың сөздерін бақылаусыз қайталау)",
-            "Сөзді тура түсіну (метафораларды, сарказмды немесе әзілдерді қабылдамау)",
-            "Ерекше интонация (бірсарынды, «роботтандырылған» немесе тым ересек сөйлеу мәнері)",
-            "Диалог құрудағы қиындықтар (өзі сөйлейді, бірақ әңгімелесушіні тыңдамайды)",
-            
-            "Көзбен контактіден қашу (мұғалімнің «ішінен өткізіп» қарайды немесе көзін тез тайдырады)",
-            "Жеке шекара мәселелері (жеке қашықтықты елемеу немесе жанасудан алшақтау)",
-            "Үзілістегі жалғыздық (сыныптастарымен ойнамайды, шеткері жүреді)",
-            "Ойын ережелерін түсінбеу (жазылмаған нормаларды түсінбеу, өз кезегін күте алмау)",
-            "Қалыпсыз мимика (бет әлпеті жағдайға сәйкес келмейді немесе бетперде сияқты қалады)",
-            
-            "Стереотипиялар (стимминг): қолдарын қанат сияқты сермеу, орындықта теңселу, заттарды айналдыру",
-            "Өзгерістерге наразылық (кесте өзгергенде, парта ауысқанда үрейлену немесе агрессия)",
-            "Тар қызығушылықтар (басқа сабақтарға зиян келтіре отырып, бір тақырыпқа шектен тыс әуестену)",
-            "Ерекше тәртіп (заттарды қатаң жүйелілікпен орналастыру; осы тәртіп бұзылса, қатты мазасыздану)",
-            
-            "Гиперсезімталдық (қоңырау соғылғанда, орындықтардың сықырлаған дыбысынан құлағын жабу)",
-            "Тағам таңдағыштық (мектеп асханасында тек белгілі бір өнімдерді ғана жеу)",
-            "Киімнен қолайсыздық сезіну (мектеп формасын шешуге үнемі әрекет жасау, белгілерді кесіп тастау)"
-        ],
-        
-        # Сектора СДВГ
-        'adhd_sec1': "🧠 Зейінсіздік (Зейін тапшылығы)",
-        'adhd_sec2': "🏃‍♂️ Гиперактивтілік (Шамадан тыс моторлық белсенділік)",
-        'adhd_sec3': "⏱ Импульсивтілік (Реакцияларды тежей алмау)",
-        
-        # Вопросы СДВГ
-        'adhd_q': [
-            "Тез алаңдаушылық (терезе сыртындағы кез келген сыбдырға жауап беріп, сабақ желісін жоғалтады)",
-            "Нұсқаулықтармен жұмыс істеу мәселелері (3-4 қадамнан тұратын тапсырманы орындай алмайды, басын ұмытады)",
-            "Заттарды үнемі жоғалту (қарындаштарын, дәптерлерін жүйелі түрде жоғалтады, киімін ұмытып кетеді)",
-            "«Ақымақтықтан» болатын қателіктер (ұқыпсыздықтан әріптерді, тыныс белгілерін немесе сандарды өткізіп жібереді)",
-            "Ақыл-ой күшін талап ететін істерден қашу (күрделі, бірсарынды тапсырмаларды бастауды кейінге қалдырады)",
-            
-            "Физикалық мазасыздық (үнемі айналады, партаның астына сырғып кетеді, орындықта теңселеді)",
-            "Қолдардың тоқтаусыз қозғалысы (қолындағы қарындашты айналдырады, саусақтарымен үстелді ұрады)",
-            "Мақсатсыз жүру (отыра алмағандықтан, шкафқа жақындау немесе қағаз тастау үшін сабақ ортасында тұрып кету)",
-            "«Шулы» мінез-құлық (жиі артық дыбыстар шығарады: орындықты сықырлатады, заттарды түсіріп алады)",
-            "Үзілістегі мәселелер (жоғары жылдамдықпен жүгіреді, адамдарға және бұрыштарға соғылады)",
-            
-            "Орыннан айқайлау (мұғалім сұрақты аяқтамай тұрып жауап береді, өз кезегін күте алмайды)",
-            "Сөзді бөлу (мұғалімнің басқа балалармен әңгімесіне немесе сыныптастарының сөзіне араласып кету)",
-            "Кезек күте алмау (ойындарда немесе асханада әрқашан бірінші болуға тырысады, кезекте тұруға наразылық білдіреді)",
-            "Әлсіз өзін-өзі бақылау (әуелі істейді немесе айтады, кейін ойланады. Заттарды рұқсатсыз ала салуы мүмкін)",
-            "Тез ашулану (тез ренжиді, ойында жеңіліске немесе ескертуге қатты жауап береді, жылап жіберуі мүмкін)"
-        ]
+        # Дефектолог (Қаз)
+        'def_title': "🎓 Дефектолог кабинеті",
+        'def_secs': ["1️⃣ Жақын арадағы даму аймағы", "2️⃣ Жоғары психикалық функциялар", "3️⃣ Қарапайым түсініктер", "4️⃣ Академиялық дағдылар"],
+        'def_q': ["Төмен оқытылу деңгейі", "Оқу/ойын әрекетінің қалыптаспауы", "Көру және есту гнозисінің бұзылуы", "Конструкциялық праксис дефициті", "Ойлау ерекшеліктері (топтастыру, логика)", "Сенсорлық эталондарды білмеу", "Уақыт пен кеңістікті бағдарлай алмау", "Оқу дағдысының қиындықтары", "Жазудың бұзылыстары", "Есептеу дағдысының бұзылуы"]
     }
 }
 
 if 'language' not in st.session_state: st.session_state.language = 'Русский'
 if 'logged_in' not in st.session_state: st.session_state.logged_in = False
+if 'role' not in st.session_state: st.session_state.role = 'Учитель'
 
 T = LANG_DATA[st.session_state.language]
 
@@ -201,274 +106,214 @@ with st.sidebar:
     st.title("⚙️ Настройки / Баптаулар")
     st.radio("Язык / Тіл:", ['Русский', 'Қазақша'], key='lang_choice', on_change=lambda: setattr(st.session_state, 'language', st.session_state.lang_choice))
     st.write("---")
-    st.subheader(T['sidebar_rec'])
-    if st.session_state.language == 'Русский':
-        st.info("""
-        **Шпаргалка учителя:**
-        - **Для СДВГ (Внимание):** Давайте инструкции пошагово — 1 шаг за 1 раз. Просите повторить задание.
-        - **Для СДВГ (Гиперактивность):** Не запрещайте крутить ручку в руках (это помогает им фокусироваться), давайте легальные поручения подвигаться.
-        - **Для РАС:** Используйте визуальные опоры и предсказуемость.
-        """)
-    else:
-        st.info("""
-        **Мұғалімге көмек:**
-        - **СДВГ үшін:** Нұсқауларды кезең-кезеңмен беріңіз (бір уақытта 1 тапсырма). Сергіту сәттерін ұйымдастырыңыз.
-        - **РАС үшін:** Көрнекі кестелер мен тұрақтылықты қолданыңыз. Түсінікті, қысқа сөйлеңіз.
-        """)
+    if st.session_state.logged_in:
+        st.write(f"👤 {st.session_state.user}")
+        st.write(f"🎭 {st.session_state.role}")
+        if st.button("Выйти / Шығу"):
+            st.session_state.logged_in = False
+            st.rerun()
 
-# --- ГЛАВНЫЙ ЭКРАН ---
-st.title(T['title'])
-
+# --- ЭКРАН АВТОРИЗАЦИИ ---
 if not st.session_state.logged_in:
+    st.markdown(f"<h1 style='text-align: center; color: #2e6c80;'>{T['site_title']}</h1>", unsafe_allow_html=True)
+    st.markdown(f"<h4 style='text-align: center;'>{T['site_subtitle']}</h4>", unsafe_allow_html=True)
+    st.write("---")
+    
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.subheader(T['auth_title'])
-        u_name = st.text_input(T['auth_name'])
+        role = st.selectbox(T['auth_role'], ["Учитель", "Психолог", "Логопед", "Дефектолог"])
+        u_name = st.text_input(T['auth_name'], placeholder="Иванова И.И.").strip()
         u_pwd = st.text_input(T['auth_pwd'], type="password")
-        if st.button(T['auth_btn'], use_container_width=True):
-            if u_pwd == "12345":
+        
+        if st.button(T['auth_btn'], use_container_width=True, type="primary"):
+            if (u_name.lower() == "ардак" or u_name.lower() == "директор") and u_pwd == "Admin2026":
                 st.session_state.logged_in = True
-                st.session_state.user = u_name
+                st.session_state.user = "Абдуллаева А.Ш. (Руководитель)"
+                st.session_state.role = "Админ"
                 st.rerun()
+            elif u_name and u_pwd:
+                with engine.connect() as conn:
+                    result = conn.execute(text("SELECT password, role FROM users WHERE username = :u"), {"u": u_name}).fetchone()
+                    if result:
+                        saved_pwd, saved_role = result
+                        if saved_pwd == u_pwd:
+                            st.session_state.logged_in = True
+                            st.session_state.user = u_name
+                            st.session_state.role = saved_role
+                            st.rerun()
+                        else:
+                            st.error("Неверный пароль!")
+                    else:
+                        with engine.begin() as insert_conn:
+                            insert_conn.execute(text("INSERT INTO users (username, password, role) VALUES (:u, :p, :r)"), {"u": u_name, "p": u_pwd, "r": role})
+                        st.session_state.logged_in = True
+                        st.session_state.user = u_name
+                        st.session_state.role = role
+                        st.rerun()
+
+    st.write("---")
+    st.markdown("""
+        <div style='text-align: center; color: gray; font-size: 14px;'>
+            <b>Разработка и поддержка системы:</b><br>
+            Абдуллаева Ардақ Шығайқызы<br>
+            📞 Тел: +7 (778) 795-46-38 | ✉️ E-mail: <a href='mailto:ardak.abdullayeva@aktau7.edu.kz'>ardak.abdullayeva@aktau7.edu.kz</a>
+        </div>
+    """, unsafe_allow_html=True)
+
+# --- ПАНЕЛЬ АДМИНА ---
+elif st.session_state.role == "Админ":
+    st.title("🛡️ Закрытая панель Администратора (Облако Supabase)")
+    st.success("Все данные теперь безопасно хранятся в облачной базе PostgreSQL!")
+    
+    st.subheader("👥 Пользователи платформы")
+    try:
+        users_df = pd.read_sql_query("SELECT username as Имя, role as Должность, password as Пароль FROM users", engine)
+        st.dataframe(users_df, use_container_width=True)
+    except Exception as e: st.write("ОШИБКА:", e)
+        
+    st.write("---")
+    st.subheader("🗄️ База данных ПМПК")
+    adm_tabs = st.tabs(["Учителя", "Психологи", "Логопеды", "Дефектологи"])
+    with adm_tabs[0]: st.dataframe(pd.read_sql_query("SELECT * FROM teacher_reports", engine))
+    with adm_tabs[1]: st.dataframe(pd.read_sql_query("SELECT * FROM psychologist_reports", engine))
+    with adm_tabs[2]: st.dataframe(pd.read_sql_query("SELECT * FROM speech_reports", engine))
+    with adm_tabs[3]: st.dataframe(pd.read_sql_query("SELECT * FROM defect_reports", engine))
+
+# --- РАБОЧАЯ ЗОНА СПЕЦИАЛИСТОВ ---
 else:
+    st.title(f"🧩 Кабинет: {st.session_state.role}")
     tabs = st.tabs([T['tab_survey'], T['tab_report'], T['tab_history']])
 
-    # --- ВКЛАДКА 1: ОБСЛЕДОВАНИЕ ---
+    # ================= 1. АНКЕТЫ =================
     with tabs[0]:
         c_col1, c_col2 = st.columns(2)
         child_name = c_col1.text_input(T['child_label'], placeholder=T['child_placeholder'])
         survey_date = c_col2.date_input(T['date_label'], datetime.now())
-        
         st.write("---")
-        test_tabs = st.tabs([T['asd_title'], T['adhd_title']])
+
+        extra_notes = ""
         
-        # --- ТЕСТ РАС ---
-        with test_tabs[0]:
-            st.markdown(f"### {T['asd_sec1']}")
-            c1 = st.checkbox(T['asd_q'][0])
-            c2 = st.checkbox(T['asd_q'][1])
-            c3 = st.checkbox(T['asd_q'][2])
-            c4 = st.checkbox(T['asd_q'][3])
-            c5 = st.checkbox(T['asd_q'][4])
+        # --- ЛОГОПЕД ---
+        if st.session_state.role == "Логопед":
+            st.subheader(T['logo_title'])
+            st.markdown(f"### {T['logo_secs'][0]}")
+            l1, l2 = st.checkbox(T['logo_q'][0]), st.checkbox(T['logo_q'][1])
+            st.markdown(f"### {T['logo_secs'][1]}")
+            l3 = st.checkbox(T['logo_q'][2])
+            st.markdown(f"### {T['logo_secs'][2]}")
+            l4, l5 = st.checkbox(T['logo_q'][3]), st.checkbox(T['logo_q'][4])
+            st.markdown(f"### {T['logo_secs'][3]}")
+            l6, l7, l8 = st.checkbox(T['logo_q'][5]), st.checkbox(T['logo_q'][6]), st.checkbox(T['logo_q'][7])
+            st.markdown(f"### {T['logo_secs'][4]}")
+            l9 = st.checkbox(T['logo_q'][8])
             
-            st.markdown(f"### {T['asd_sec2']}")
-            s1 = st.checkbox(T['asd_q'][5])
-            s2 = st.checkbox(T['asd_q'][6])
-            s3 = st.checkbox(T['asd_q'][7])
-            s4 = st.checkbox(T['asd_q'][8])
-            s5 = st.checkbox(T['asd_q'][9])
+            extra_notes = st.text_area(T['extra_notes_label'], placeholder=T['placeholder_notes'])
+            if st.button(T['save_btn'], use_container_width=True, type="primary"):
+                if child_name:
+                    l_score = sum([l1,l2,l3,l4,l5,l6,l7,l8,l9])
+                    l_det = f"Артик:{sum([l1,l2])};Слог:{l3};Фон:{sum([l4,l5])};Лекс:{sum([l6,l7,l8])};Темп:{l9}"
+                    with engine.begin() as conn:
+                        conn.execute(text("INSERT INTO speech_reports (date, speech_name, child_id, total_score, details, notes, lang) VALUES (:d, :n, :c, :s, :det, :not, :l)"),
+                                     {"d": survey_date.strftime("%d.%m.%Y"), "n": st.session_state.user, "c": child_name, "s": l_score, "det": l_det, "not": extra_notes, "l": st.session_state.language})
+                    st.success("✅ Данные логопеда успешно загружены в облако!")
+                else: st.error("Укажите код ученика!")
+
+        # --- ДЕФЕКТОЛОГ ---
+        elif st.session_state.role == "Дефектолог":
+            st.subheader(T['def_title'])
+            st.markdown(f"### {T['def_secs'][0]}")
+            d1, d2 = st.checkbox(T['def_q'][0]), st.checkbox(T['def_q'][1])
+            st.markdown(f"### {T['def_secs'][1]}")
+            d3, d4, d5 = st.checkbox(T['def_q'][2]), st.checkbox(T['def_q'][3]), st.checkbox(T['def_q'][4])
+            st.markdown(f"### {T['def_secs'][2]}")
+            d6, d7 = st.checkbox(T['def_q'][5]), st.checkbox(T['def_q'][6])
+            st.markdown(f"### {T['def_secs'][3]}")
+            d8, d9, d10 = st.checkbox(T['def_q'][7]), st.checkbox(T['def_q'][8]), st.checkbox(T['def_q'][9])
             
-            st.markdown(f"### {T['asd_sec3']}")
-            b1 = st.checkbox(T['asd_q'][10])
-            b2 = st.checkbox(T['asd_q'][11])
-            b3 = st.checkbox(T['asd_q'][12])
-            b4 = st.checkbox(T['asd_q'][13])
-            
-            st.markdown(f"### {T['asd_sec4']}")
-            sn1 = st.checkbox(T['asd_q'][14])
-            sn2 = st.checkbox(T['asd_q'][15])
-            sn3 = st.checkbox(T['asd_q'][16])
+            extra_notes = st.text_area(T['extra_notes_label'], placeholder=T['placeholder_notes'])
+            if st.button(T['save_btn'], use_container_width=True, type="primary"):
+                if child_name:
+                    d_score = sum([d1,d2,d3,d4,d5,d6,d7,d8,d9,d10])
+                    d_det = f"Обуч:{sum([d1,d2])};ВПФ:{sum([d3,d4,d5])};Сенс:{sum([d6,d7])};Акад:{sum([d8,d9,d10])}"
+                    with engine.begin() as conn:
+                        conn.execute(text("INSERT INTO defect_reports (date, defect_name, child_id, total_score, details, notes, lang) VALUES (:d, :n, :c, :s, :det, :not, :l)"),
+                                     {"d": survey_date.strftime("%d.%m.%Y"), "n": st.session_state.user, "c": child_name, "s": d_score, "det": d_det, "not": extra_notes, "l": st.session_state.language})
+                    st.success("✅ Данные дефектолога сохранены в облако!")
+                else: st.error("Укажите код ученика!")
 
-            st.write("")
-            asd_notes_input = st.text_area(T['notes_asd_label'], placeholder=T['placeholder_notes'])
+        # --- УЧИТЕЛЬ ---
+        elif st.session_state.role == "Учитель":
+            st.subheader("Анкета Учителя")
+            t1, t2 = st.checkbox("Маркеры РАС (поведение)"), st.checkbox("Дефицит внимания / Гиперактивность (СДВГ)")
+            extra_notes = st.text_area(T['extra_notes_label'], placeholder=T['placeholder_notes'])
+            if st.button(T['save_btn'], use_container_width=True, type="primary"):
+                if child_name:
+                    with engine.begin() as conn:
+                        conn.execute(text("INSERT INTO teacher_reports (date, teacher_name, child_id, asd_score, adhd_score, details, adhd_details, notes, lang) VALUES (:d, :n, :c, :a, :ad, :det, :adet, :not, :l)"),
+                                     {"d": survey_date.strftime("%d.%m.%Y"), "n": st.session_state.user, "c": child_name, "a": int(t1), "ad": int(t2), "det": "РАС", "adet": "СДВГ", "not": extra_notes, "l": st.session_state.language})
+                    st.success("✅ Данные педагога отправлены в облако!")
+                else: st.error("Укажите код ученика!")
 
-            asd_score = sum([c1,c2,c3,c4,c5, s1,s2,s3,s4,s5, b1,b2,b3,b4, sn1,sn2,sn3])
-            
-        # --- ТЕСТ СДВГ ---
-        with test_tabs[1]:
-            st.markdown(f"### {T['adhd_sec1']}")
-            h_att1 = st.checkbox(T['adhd_q'][0])
-            h_att2 = st.checkbox(T['adhd_q'][1])
-            h_att3 = st.checkbox(T['adhd_q'][2])
-            h_att4 = st.checkbox(T['adhd_q'][3])
-            h_att5 = st.checkbox(T['adhd_q'][4])
+        # --- ПСИХОЛОГ ---
+        elif st.session_state.role == "Психолог":
+            st.subheader("Анкета Психолога")
+            p1, p2, p3 = st.checkbox("Высокая тревожность"), st.checkbox("Эмоциональная лабильность"), st.checkbox("Агрессия")
+            p4, p5 = st.checkbox("Истощаемость процессов"), st.checkbox("Трудности памяти/внимания")
+            extra_notes = st.text_area(T['extra_notes_label'], placeholder=T['placeholder_notes'])
+            if st.button(T['save_btn'], use_container_width=True, type="primary"):
+                if child_name:
+                    with engine.begin() as conn:
+                        conn.execute(text("INSERT INTO psychologist_reports (date, psych_name, child_id, total_score, details, notes, lang) VALUES (:d, :n, :c, :s, :det, :not, :l)"),
+                                     {"d": survey_date.strftime("%d.%m.%Y"), "n": st.session_state.user, "c": child_name, "s": sum([p1,p2,p3,p4,p5]), "det": f"Эмоц:{sum([p1,p2,p3])};Когн:{sum([p4,p5])}", "not": extra_notes, "l": st.session_state.language})
+                    st.success("✅ Данные психолога успешно сохранены!")
+                else: st.error("Укажите код ученика!")
 
-            st.markdown(f"### {T['adhd_sec2']}")
-            h_mot1 = st.checkbox(T['adhd_q'][5])
-            h_mot2 = st.checkbox(T['adhd_q'][6])
-            h_mot3 = st.checkbox(T['adhd_q'][7])
-            h_mot4 = st.checkbox(T['adhd_q'][8])
-            h_mot5 = st.checkbox(T['adhd_q'][9])
-
-            st.markdown(f"### {T['adhd_sec3']}")
-            h_imp1 = st.checkbox(T['adhd_q'][10])
-            h_imp2 = st.checkbox(T['adhd_q'][11])
-            h_imp3 = st.checkbox(T['adhd_q'][12])
-            h_imp4 = st.checkbox(T['adhd_q'][13])
-            h_imp5 = st.checkbox(T['adhd_q'][14])
-
-            st.write("")
-            adhd_notes_input = st.text_area(T['notes_adhd_label'], placeholder=T['placeholder_notes'])
-
-            adhd_score = sum([h_att1, h_att2, h_att3, h_att4, h_att5, h_mot1, h_mot2, h_mot3, h_mot4, h_mot5, h_imp1, h_imp2, h_imp3, h_imp4, h_imp5])
-
-        if st.button(T['save_btn'], use_container_width=True, type="primary"):
-            if child_name:
-                conn = sqlite3.connect('school_consilium_v10.db')
-                c = conn.cursor()
-                now_str = survey_date.strftime("%d.%m.%Y")
-                
-                details_asd = f"Речь:{sum([c1,c2,c3,c4,c5])};Социум:{sum([s1,s2,s3,s4,s5])};Повед:{sum([b1,b2,b3,b4])};Сенс:{sum([sn1,sn2,sn3])}"
-                details_adhd = f"Внимание:{sum([h_att1,h_att2,h_att3,h_att4,h_att5])};Гипер:{sum([h_mot1,h_mot2,h_mot3,h_mot4,h_mot5])};Импульс:{sum([h_imp1,h_imp2,h_imp3,h_imp4,h_imp5])}"
-                
-                c.execute("""INSERT INTO teacher_reports 
-                          (date, teacher_name, child_id, asd_score, adhd_score, details, adhd_details, asd_notes, adhd_notes, lang) 
-                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", 
-                          (now_str, st.session_state.user, child_name, asd_score, adhd_score, details_asd, details_adhd, asd_notes_input, adhd_notes_input, st.session_state.language))
-                conn.commit()
-                conn.close()
-                if st.session_state.language == 'Русский':
-                    st.success("✅ Анкета успешно сохранена вместе с личными наблюдениями!")
-                else:
-                    st.success("✅ Сауалнама мұғалімнің жеке бақылауларымен бірге сәтті сақталды!")
-            else:
-                if st.session_state.language == 'Русский':
-                    st.error("Пожалуйста, укажите код ученика!")
-                else:
-                    st.error("Оқушы кодын көрсетіңіз!")
-
-    # --- ВКЛАДКА 2: ОТЧЕТ И РОДИТЕЛЯМ ---
+    # ================= 2. КОМПЛЕКСНЫЙ ОТЧЕТ =================
     with tabs[1]:
-        conn = sqlite3.connect('school_consilium_v10.db')
-        df = pd.read_sql_query("SELECT * FROM teacher_reports", conn)
-        conn.close()
+        st.subheader("📊 Аналитический модуль ПМПК")
+        all_children = []
+        for tbl in ['teacher_reports', 'psychologist_reports', 'speech_reports', 'defect_reports']:
+            try:
+                df_c = pd.read_sql_query(f"SELECT child_id FROM {tbl}", engine)
+                all_children.extend(df_c['child_id'].tolist())
+            except: pass
         
-        if not df.empty:
-            sel_child = st.selectbox(
-                T['select_child_label'], 
-                df['child_id'].unique()
-            )
-            child_data = df[df['child_id'] == sel_child].iloc[-1]
-            
-            a_score = child_data['asd_score']
-            h_score = child_data['adhd_score']
-            saved_asd_notes = child_data['asd_notes']
-            saved_adhd_notes = child_data['adhd_notes']
-
-            if st.button(T['report_gen'], use_container_width=True):
+        unique_children = list(set(all_children))
+        if unique_children:
+            sel_child = st.selectbox("Выберите код ученика для отчета", unique_children)
+            if st.button(T['report_gen'], use_container_width=True, type="primary"):
                 st.divider()
+                st.markdown(f"## 📄 КОМПЛЕКСНОЕ ЗАКЛЮЧЕНИЕ ПМПК")
+                st.markdown(f"### Код учащегося: **{sel_child}**")
                 
-                if st.session_state.language == 'Русский':
-                    st.subheader(f"📊 Психолого-педагогический отчет: {sel_child}")
-                    st.caption(f"Дата обследования: {child_data['date']} | Составитель: {child_data['teacher_name']}")
-                else:
-                    st.subheader(f"📊 Психологиялық-педагогикалық есеп: {sel_child}")
-                    st.caption(f"Тексеру күні: {child_data['date']} | Құрастырушы: {child_data['teacher_name']}")
+                t_data = pd.read_sql_query(f"SELECT * FROM teacher_reports WHERE child_id='{sel_child}'", engine)
+                p_data = pd.read_sql_query(f"SELECT * FROM psychologist_reports WHERE child_id='{sel_child}'", engine)
+                l_data = pd.read_sql_query(f"SELECT * FROM speech_reports WHERE child_id='{sel_child}'", engine)
+                d_data = pd.read_sql_query(f"SELECT * FROM defect_reports WHERE child_id='{sel_child}'", engine)
                 
-                try:
-                    parts = child_data['details'].split(';')
-                    r_b = int(parts[0].split(':')[1])
-                    s_b = int(parts[1].split(':')[1])
-                    p_b = int(parts[2].split(':')[1])
-                    sn_b = int(parts[3].split(':')[1])
-                except:
-                    r_b, s_b, p_b, sn_b = 0, 0, 0, 0
-                    
-                try:
-                    h_parts = child_data['adhd_details'].split(';')
-                    att_b = int(h_parts[0].split(':')[1])
-                    mot_b = int(h_parts[1].split(':')[1])
-                    imp_b = int(h_parts[2].split(':')[1])
-                except:
-                    att_b, mot_b, imp_b = 0, 0, 0
-
-                if st.session_state.language == 'Русский':
-                    beh_text = "В ходе наблюдения в учебном процессе выявлены следующие особенности:\n"
-                    parent_text = ""
-
-                    if a_score > 0:
-                        beh_text += f"\n📌 **Проявления маркеров РАС (выявлено {a_score} из 17):** "
-                        if r_b > 1: beh_text += "Выражены специфические особенности коммуникации (эхолалии, буквальное восприятие речи, трудности ведения двустороннего диалога). "
-                        if s_b > 1: beh_text += "Заметны дефициты социального взаимодействия: уклонение от прямого визуального контакта, дезориентация в личных границах, социальное уединение на переменах. "
-                        if p_b > 1: beh_text += "Выявлена выраженная фиксация на монотонных ритуалах, узкоспециализированных интересах и моторный стимминг в стрессовых ситуациях. "
-                        if sn_b > 0: beh_text += "Присутствует сенсорная дезинтеграция (болезненная реакция на школьный шум, избирательность в пищевом поведении или физический дискомфорт от элементов одежды). "
-                        
-                        if saved_asd_notes:
-                            beh_text += f"\n*Личные заметки педагога по РАС:* {saved_asd_notes}\n"
-
-                        parent_text += "### 🧩 Рекомендации родителям при признаках РАС:\n"
-                        parent_text += "1. **Предсказуемость:** Составьте домашнее визуальное расписание дня. Избегайте резких и внезапных перемен.\n"
-                        parent_text += "2. **Прямая коммуникация:** Говорите с ребенком прямо и однозначно, без намеков и скрытой иронии.\n"
-                        parent_text += "3. **Сенсорный комфорт:** Обеспечьте дома зону сенсорной разгрузки (тихое место). Выбирайте бесшовную мягкую одежду.\n"
-                    
-                    if h_score > 0:
-                        beh_text += f"\n\n📌 **Проявления маркеров СДВГ (выявлено {h_score} из 15):** "
-                        if att_b > 1: beh_text += "Зафиксирован выраженный дефицит внимания (повышенная отвлекаемость на внешние раздражители, трудности удержания в памяти многоэтапных инструкций, регулярная потеря школьных принадлежностей). "
-                        if mot_b > 1: beh_text += "Наблюдается высокая моторная гиперактивность (неспособность к статической позе за партой, непрерывные хаотичные движения рук, бесцельное перемещение по классу во время урока). "
-                        if imp_b > 1: beh_text += "Проявляется выраженная импульсивность поведения (выкрики ответов до завершения вопроса, перебивание сверстников и педагога, вспышки раздражительности при неудачах или ожидании). "
-                        
-                        if saved_adhd_notes:
-                            beh_text += f"\n*Личные заметки педагога по СДВГ:* {saved_adhd_notes}\n"
-
-                        parent_text += "\n### ⚡ Рекомендации родителям при признаках СДВГ:\n"
-                        parent_text += "1. **Режим дозирования нагрузок:** Организуйте выполнение домашних заданий интервалами по 15-20 минут с перерывами на активность.\n"
-                        parent_text += "2. **Минимизация факторов:** Очистите рабочую зону ребенка дома от лишних предметов во время учебы.\n"
-                        parent_text += "3. **Поддержка:** Обязательно хвалите и поощряйте ребенка за завершенные дела и проявленное терпение.\n"
-
-                    if a_score == 0 and h_score == 0:
-                        beh_text = "Особенности поведения ребенка находятся в рамках среднестатистической возрастной нормы."
-                        if saved_asd_notes or saved_adhd_notes:
-                            beh_text += f"\n*Заметки педагога:* {saved_asd_notes} {saved_adhd_notes}"
-                        parent_text = "Рекомендовано продолжать плановое воспитание и стандартный педагогический мониторинг."
+                st.markdown("#### 🏫 1. Учитель:")
+                if not t_data.empty: st.write(f"Маркеры РАС: {t_data.iloc[-1]['asd_score']}, СДВГ: {t_data.iloc[-1]['adhd_score']}. Заметки: {t_data.iloc[-1]['notes']}")
+                else: st.warning("Нет данных")
                 
-                else:
-                    beh_text = "Оқу үрдісін бақылау барысында келесі ерекшеліктер анықталды:\n"
-                    parent_text = ""
-
-                    if a_score > 0:
-                        beh_text += f"\n📌 **РАС маркерлерінің көріністері (17-ден {a_score} анықталды):** "
-                        if r_b > 1: beh_text += "Арнайы коммуникациялық ерекшеліктер байқалады (эхолалия, сөзді тура мағынада қабылдау, екіжақты диалог жүргізудегі қиындықтар). "
-                        if s_b > 1: beh_text += "Әлеуметтік өзара әрекеттесу тапшылығы байқалады: тікелей көз контактісінен қашу, жеке шекараларды сақтамау немесе үзілісте оқшаулану. "
-                        if p_b > 1: beh_text += "Бірсарынды ритуалдарға, тар шеңбердегі қызығушылықтарға нақты бекітілу және стрестік жағдайларда моторлық стимминг анықталды. "
-                        if sn_b > 0: beh_text += "Сенсорлық дезинтеграция бар (мектеп шуына ауыр реакция, тағам таңдағыштық немесе киім элементтерінен физикалық қолайсыздық сезіну). "
-                        
-                        if saved_asd_notes:
-                            beh_text += f"\n*Мұғалімнің РАС бойынша жеке жазбалары:* {saved_asd_notes}\n"
-
-                        parent_text += "### 🧩 РАС белгілері бар балалардың ата-аналарына ұсыныстар:\n"
-                        parent_text += "1. **Болжамдылық:** Үйдегі күн тәртібінің көрнекі кестесін жасаңыз. Кенеттен болатын өзгерістерден аулақ болыңыз.\n"
-                        parent_text += "2. **Тікелей коммуникация:** Баламен анық және нақты сөйлесіңіз, астарлы мағына немесе жасырын әзілдерді қолданбаңыз.\n"
-                        parent_text += "3. **Сенсорлық жайлылық:** Үйде сенсорлық демалыс аймағын (тыныш орын) ұйымдастырыңыз. Қатты белгілері жоқ жұмсақ киімдерді таңдаңыз.\n"
-                    
-                    if h_score > 0:
-                        beh_text += f"\n\n📌 **СДВГ маркерлерінің көріністері (15-тен {h_score} анықталды):** "
-                        if att_b > 1: beh_text += "Анық зейін тапшылығы тіркелді (сыртқы тітіркендіргіштерге тез алаңдау, көп кезеңді нұсқауларды жадында сақтау қиындығы, мектеп құралдарын жүйелі түрде жоғалту). "
-                        if mot_b > 1: beh_text += "Жоғары моторлық гиперактивность байқалады (партада тыныш отыра алмау, қолдардың тоқтаусыз қозғалысы, сабақ уақытында сынып ішінде мақсатсыз жүру). "
-                        if imp_b > 1: beh_text += "Мінез-құлықтың айқын импульсивтілігі көрінеді (сұрақ аяқталмай тұрып жауап береді, құрдастары мен мұғалімнің сөзін бөлу, сәтсіздіктер немесе күту кезінде тез ашулану). "
-                        
-                        if saved_adhd_notes:
-                            beh_text += f"\n*Мұғалімнің СДВГ бойынша жеке жазбалары:* {saved_adhd_notes}\n"
-
-                        parent_text += "\n### ⚡ СДВГ белгілері бар балалардың ата-аналарына ұсыныстар:\n"
-                        parent_text += "1. **Жүктемені мөлшерлеу режимі:** Үй тапсырмасын орындауды 15-20 минуттық қысқа аралықтармен ұйымдастырыңыз, арасында міндетті түрде физикалық белсенділікке үзіліс жасаңыз.\n"
-                        parent_text += "2. **Алаңдатушы факторларды азайту:** Сабақ оқу уақытында баланың жұмыс аймағын артық заттардан тазартыңыз.\n"
-                        parent_text += "3. **Қолдау:** Баланы аяқталған істері мен көрсеткен шыдамдылығы үшін міндетті түрде мақтаңыз және ынталандырыңыз.\n"
-
-                    if a_score == 0 and h_score == 0:
-                        beh_text = "Баланың мінез-құлық ерекшеліктері орташа жас нормасы шегінде."
-                        if saved_asd_notes or saved_adhd_notes:
-                            beh_text += f"\n*Мұғалімнің жазбалары:* {saved_asd_notes} {saved_adhd_notes}"
-                        parent_text = "Жоспарлы тәрбие мен стандартты педагогикалық мониторингті жалғастыру ұсынылады."
-
-                st.markdown(f"#### 📝 {T['behavior_desc']}:")
-                st.info(beh_text)
+                st.markdown("#### 🧠 2. Психолог:")
+                if not p_data.empty: st.write(f"Сумма дефицитов: {p_data.iloc[-1]['total_score']} ({p_data.iloc[-1]['details']}). Заметки: {p_data.iloc[-1]['notes']}")
+                else: st.warning("Нет данных")
                 
-                st.markdown(f"#### {T['parent_rec_title']}:")
-                st.success(parent_text)
+                st.markdown("#### 🗣 3. Логопед:")
+                if not l_data.empty: st.write(f"Индекс нарушений: {l_data.iloc[-1]['total_score']}/9. Заметки: {l_data.iloc[-1]['notes']}")
+                else: st.warning("Нет данных")
                 
-                report_file = f"ОТЧЕТ / ЕСЕП\nУченик / Оқушы коды: {sel_child}\nДата / Күні: {child_data['date']}\n\n{beh_text}\n\n{parent_text}"
-                st.download_button(
-                    "📥 Скачать готовый отчет (.txt) / Дайын есепті жүктеу", 
-                    data=report_file.encode('utf-16'), 
-                    file_name=f"Report_{sel_child}.txt", 
-                    use_container_width=True
-                )
+                st.markdown("#### 🎓 4. Дефектолог:")
+                if not d_data.empty: st.write(f"Индекс нарушений: {d_data.iloc[-1]['total_score']}/10. Заметки: {d_data.iloc[-1]['notes']}")
+                else: st.warning("Нет данных")
         else:
-            st.info("В архивной базе данных пока нет записей. / Мәліметтер базасында жазбалар жоқ.")
+            st.info("В облачной базе данных пока нет записей.")
 
-    # --- ВКЛАДКА 3: АРХИВ ---
+    # ================= 3. АРХИВ =================
     with tabs[2]:
-        conn = sqlite3.connect('school_consilium_v10.db')
-        full_df = pd.read_sql_query("SELECT date as 'Дата/Күні', child_id as 'Код ученика/Оқушы коды', asd_score as 'Балл РАС', adhd_score as 'Балл СДВГ', asd_notes as 'Заметки/Жазбалар РАС', adhd_notes as 'Заметки/Жазбалар СДВГ', teacher_name as 'Учитель/Мұғалім' FROM teacher_reports", conn)
-        conn.close()
-        st.dataframe(full_df, use_container_width=True)
+        st.subheader("📁 Сводная база данных (Ваш профиль)")
+        if st.session_state.role == "Логопед": st.dataframe(pd.read_sql_query("SELECT date, child_id, total_score, notes FROM speech_reports", engine), use_container_width=True)
+        elif st.session_state.role == "Дефектолог": st.dataframe(pd.read_sql_query("SELECT date, child_id, total_score, notes FROM defect_reports", engine), use_container_width=True)
+        elif st.session_state.role == "Психолог": st.dataframe(pd.read_sql_query("SELECT date, child_id, total_score, notes FROM psychologist_reports", engine), use_container_width=True)
+        elif st.session_state.role == "Учитель": st.dataframe(pd.read_sql_query("SELECT date, child_id, asd_score, adhd_score, notes FROM teacher_reports", engine), use_container_width=True)
