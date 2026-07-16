@@ -51,7 +51,7 @@ LANG_DATA = {
         'auth_btn': "Войти в систему",
         'extra_notes_label': "✍️ Дополнительные экспертные наблюдения:",
         'placeholder_notes': "Введите информацию...",
-        'contacts_title': "📞 Контакты руководства ПМПК:",
+        'contacts_title': "📞 Контакты:",
 
         # --- УЧИТЕЛЬ (РУС) ---
         'teach_title': "🏫 Педагогический чек-лист оценки развития ребёнка",
@@ -118,12 +118,12 @@ LANG_DATA = {
         'auth_btn': "Жүйеге кіру",
         'extra_notes_label': "✍️ Қосымша сараптамалық бақылаулар:",
         'placeholder_notes': "Ақпаратты енгізіңіз...",
-        'contacts_title': "📞 ПМПҚ басшылығының байланыстары:",
+        'contacts_title': "📞 Байланыс мәліметтері:",
 
         # --- УЧИТЕЛЬ (ҚАЗ) ---
         'teach_title': "🏫 Бала дамуын бағалаудың педагогикалық чек-лисі",
         'teach_secs': [
-            "1️⃣ Коммуникация және сөйлеу ерекшеліктері", "2️⃣ Әлеуметтік өзара әрекеттесу", "3️⃣ Мінез-құлық және оқу процесі", "4️⃣ Сенсорлық реакциялар",
+            "1️⃣ Коммуникация және сөйлеу ерекшеліктері", "2️⃣ Әлеуметтік өзаре әрекеттесу", "3️⃣ Мінез-құлық және оқу процесі", "4️⃣ Сенсорлық реакциялар",
             "1️⃣ Зейінсіздік (Назар аудару тапшылығы)", "2️⃣ Гиперактивтілік (Артық моторлық белсенділік)", "3️⃣ Impulsivtilik (Реакцияларды тежей алмау)"
         ],
         'teach_q': [
@@ -201,7 +201,7 @@ if not st.session_state.logged_in:
         if st.button(T['auth_btn'], use_container_width=True, type="primary"):
             if (u_name.lower() == "ардак" or u_name.lower() == "директор") and u_pwd == "Admin2026":
                 st.session_state.logged_in = True
-                st.session_state.user = "Абдуллаева А.Ш. (Руководитель)"
+                st.session_state.user = "Абдуллаева А.Ш."
                 st.session_state.role = "Админ"
                 st.rerun()
             elif u_name and u_pwd:
@@ -222,19 +222,19 @@ if not st.session_state.logged_in:
                         st.session_state.role = role
                         st.rerun()
 
-        # --- НОВЫЙ БЛОК: КОНТАКТЫ РУКОВОДИТЕЛЯ НА ГЛАВНОМ ЭКРАНЕ ---
+        # --- НОВЫЙ БЛОК: КОНТАКТЫ НА ГЛАВНОМ ЭКРАНЕ ---
         st.write(" ")
         st.write("---")
         st.markdown(f"👥 **{T['contacts_title']}**")
         st.markdown("""
-        * **ФИО Руководителя:** Абдуллаева Ардак Шамшидиновна
-        * **Телефон / WhatsApp:** +7 (775) 321-45-67
-        * **Email:** a.abdullayeva@spectrum-help.kz
+        * **ФИО:** Абдуллаева Ардақ Шығайқызы
+        * **Телефон / WhatsApp:** +77787954638
+        * **Email:** ardak.abdullayeva@aktau7.edu.kz
         """)
 
 # --- ПАНЕЛЬ АДМИНА ---
 elif st.session_state.role == "Админ":
-    st.title("🛡️ Закрытая панель Руководителя ПМПК")
+    st.title("🛡️ Закрытая панель управления")
     
     # 1. Список специалистов
     st.subheader("👥 Зарегистрированные специалисты (Логины и Пароли)")
@@ -385,62 +385,14 @@ else:
                         conn.execute(text("INSERT INTO teacher_reports (date, teacher_name, child_id, asd_score, adhd_score, details, adhd_details, notes, lang) VALUES (:d, :n, :c, :a, :ad, 'РАС', 'СДВГ', :not, :l)"),
                                      {"d": survey_date.strftime("%d.%m.%Y"), "n": st.session_state.user, "c": child_name, "a": asd_score, "ad": adhd_score, "not": extra_notes, "l": st.session_state.language})
                     elif st.session_state.role == "Психолог":
-                        conn.execute(text("INSERT INTO psychologist_reports (date, psych_name, child_id, total_score, details, notes, lang) VALUES (:d, :n, :c, :s, 'Анкета', :not, :l)"),
+                        conn.execute(text("INSERT INTO psychologist_reports (date, psych_name, child_id, total_score, details, notes, lang) VALUES (:d, :n, :c, :s, 'Психология', :not, :l)"),
                                      {"d": survey_date.strftime("%d.%m.%Y"), "n": st.session_state.user, "c": child_name, "s": total_score, "not": extra_notes, "l": st.session_state.language})
                     elif st.session_state.role == "Логопед":
-                        conn.execute(text("INSERT INTO speech_reports (date, speech_name, child_id, total_score, details, notes, lang) VALUES (:d, :n, :c, :s, 'Анкета', :not, :l)"),
+                        conn.execute(text("INSERT INTO speech_reports (date, speech_name, child_id, total_score, details, notes, lang) VALUES (:d, :n, :c, :s, 'Логопедия', :not, :l)"),
                                      {"d": survey_date.strftime("%d.%m.%Y"), "n": st.session_state.user, "c": child_name, "s": total_score, "not": extra_notes, "l": st.session_state.language})
                     elif st.session_state.role == "Дефектолог":
-                        conn.execute(text("INSERT INTO defect_reports (date, defect_name, child_id, total_score, details, notes, lang) VALUES (:d, :n, :c, :s, 'Анкета', :not, :l)"),
+                        conn.execute(text("INSERT INTO defect_reports (date, defect_name, child_id, total_score, details, notes, lang) VALUES (:d, :n, :c, :s, 'Дефектология', :not, :l)"),
                                      {"d": survey_date.strftime("%d.%m.%Y"), "n": st.session_state.user, "c": child_name, "s": total_score, "not": extra_notes, "l": st.session_state.language})
-                st.success("✅ Данные успешно сохранены и отправлены в базу!")
-            else: st.error("Укажите код ученика!")
-
-    # ================= 2. КОМПЛЕКСНЫЙ ОТЧЕТ =================
-    with tabs[1]:
-        st.subheader("📊 Аналитический модуль ПМПК")
-        all_children = []
-        for tbl in ['teacher_reports', 'psychologist_reports', 'speech_reports', 'defect_reports']:
-            try:
-                df_c = pd.read_sql_query(f"SELECT child_id FROM {tbl}", engine)
-                all_children.extend(df_c['child_id'].tolist())
-            except: pass
-        
-        unique_children = list(set(all_children))
-        if unique_children:
-            sel_child = st.selectbox("Выберите код ученика для отчета", unique_children)
-            if st.button(T['report_gen'], use_container_width=True, type="primary"):
-                st.divider()
-                st.markdown(f"## 📄 КОМПЛЕКСНОЕ ЗАКЛЮЧЕНИЕ ПМПК")
-                st.markdown(f"### Код учащегося: **{sel_child}**")
-                
-                t_data = pd.read_sql_query(f"SELECT * FROM teacher_reports WHERE child_id='{sel_child}'", engine)
-                p_data = pd.read_sql_query(f"SELECT * FROM psychologist_reports WHERE child_id='{sel_child}'", engine)
-                l_data = pd.read_sql_query(f"SELECT * FROM speech_reports WHERE child_id='{sel_child}'", engine)
-                d_data = pd.read_sql_query(f"SELECT * FROM defect_reports WHERE child_id='{sel_child}'", engine)
-                
-                st.markdown("#### 🏫 1. Учитель:")
-                if not t_data.empty: st.write(f"Маркеры РАС: {t_data.iloc[-1]['asd_score']} из 18, СДВГ: {t_data.iloc[-1]['adhd_score']} из 15. Заметки: {t_data.iloc[-1]['notes']}")
-                else: st.warning("Нет данных")
-                
-                st.markdown("#### 🧠 2. Психолог:")
-                if not p_data.empty: st.write(f"Выявлено проблемных маркеров: {p_data.iloc[-1]['total_score']}. Заметки: {p_data.iloc[-1]['notes']}")
-                else: st.warning("Нет данных")
-                
-                st.markdown("#### 🗣 3. Логопед:")
-                if not l_data.empty: st.write(f"Количество нарушений речи: {l_data.iloc[-1]['total_score']}. Заметки: {l_data.iloc[-1]['notes']}")
-                else: st.warning("Нет данных")
-                
-                st.markdown("#### 🎓 4. Дефектолог:")
-                if not d_data.empty: st.write(f"Сумма дефицитов обучения: {d_data.iloc[-1]['total_score']}. Заметки: {d_data.iloc[-1]['notes']}")
-                else: st.warning("Нет данных")
-        else:
-            st.info("В облачной базе данных пока нет записей.")
-
-    # ================= 3. АРХИВ =================
-    with tabs[2]:
-        st.subheader("📁 Сводная база данных (Ваш профиль)")
-        if st.session_state.role == "Логопед": st.dataframe(pd.read_sql_query("SELECT date, child_id, total_score, notes FROM speech_reports", engine), use_container_width=True)
-        elif st.session_state.role == "Дефектолог": st.dataframe(pd.read_sql_query("SELECT date, child_id, total_score, notes FROM defect_reports", engine), use_container_width=True)
-        elif st.session_state.role == "Психолог": st.dataframe(pd.read_sql_query("SELECT date, child_id, total_score, notes FROM psychologist_reports", engine), use_container_width=True)
-        elif st.session_state.role == "Учитель": st.dataframe(pd.read_sql_query("SELECT date, child_id, asd_score, adhd_score, notes FROM teacher_reports", engine), use_container_width=True)
+                st.success(f"🎉 Данные по ребенку {child_name} успешно сохранены!")
+            else:
+                st.error("Пожалуйста, введите код ребенка!")
