@@ -1,0 +1,26 @@
+name: Keep Streamlit App Awake
+
+on:
+  schedule:
+    # Запуск каждые 24 часа (в полночь по Гринвичу)
+    - cron: '0 0 * * *'
+  workflow_dispatch: # Позволяет запустить вручную при необходимости
+
+jobs:
+  keep-awake:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Update ping timestamp
+      run: |
+        echo "Last awake check: $(date)" > ping.txt
+
+    - name: Commit and push changes
+      run: |
+        git config --global user.name "GitHub Action"
+        git config --global user.email "action@github.com"
+        git add ping.txt
+        git commit -m "🤖 Авто-пинг для пробуждения сайта" || exit 0
+        git push
