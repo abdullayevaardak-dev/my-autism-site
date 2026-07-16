@@ -85,7 +85,7 @@ LANG_DATA = {
         'logo_q': [
             ["Нарушения звукопроизношения (сигматизм, ротацизм, ламбдацизм и др.).", "Нарушения артикуляционной моторики (вялость губ/языка, девиация, тремор при удержании позы)."],
             ["Искажение слоговой структуры (пропуски слогов, перестановки, добавление лишних звуков в сложных словах)."],
-            ["Нарушение фонематического слуха и восприятия (не различает на слух схожие звуки: Б-П, З-С, Ш-Ж).", "Трудности звукового анализа и синтеза (не может назвать первый/последний звук, определить количество)."],
+            ["Нарушение фонематического слуха и восприятия (не различает на слух схожие звуки: Б-П, З-С, Ш-Ж).", "Трудности звувого анализа и синтеза (не может назвать первый/последний звук, определить количество)."],
             ["Бедный словарный запас (не знает названий детенышей животных, профессий, обиходных понятий).", "Аграмматизмы (ошибки в согласовании: «пять стульях», «голубая платье», пропуски предлогов).", "Нарушение связной речи (не может пересказать короткий текст или составить рассказ по картинке)."],
             ["Наличие запинок, заикания, критически ускоренный (тахилалия) или замедленный (брадилалия) темп речи."]
         ],
@@ -234,89 +234,169 @@ if not st.session_state.logged_in:
 
 # --- ПАНЕЛЬ АДМИНА ---
 elif st.session_state.role == "Админ":
-    st.title("🛡️ Закрытая панель управления")
+    st.title("🛡️ Панель Администратора")
     
-    # 1. Список специалистов
-    st.subheader("👥 Зарегистрированные специалисты (Логины и Пароли)")
-    try:
-        users_df = pd.read_sql_query('SELECT username as "ФИО Специалиста", role as "Роль / Кабинет", password as "Текущий Пароль" FROM users', engine)
-        st.dataframe(users_df, use_container_width=True)
-        
-        # --- УДАЛЕНИЕ СПЕЦИАЛИСТОВ ---
-        st.markdown("### 🗑️ Управление доступом сотрудников")
-        all_users_list = users_df["ФИО Специалиста"].tolist() if not users_df.empty else []
-        if all_users_list:
-            user_to_del = st.selectbox("Выберите ФИО специалиста, которого нужно удалить из системы:", all_users_list)
-            if st.button(f"❌ Полностью удалить доступ для {user_to_del}", type="primary"):
-                with engine.begin() as conn:
-                    conn.execute(text("DELETE FROM users WHERE username = :u"), {"u": user_to_del})
-                st.success(f"💥 Специалист {user_to_del} успешно удален из системы!")
-                st.rerun()
-        else:
-            st.info("В системе пока нет зарегистрированных специалистов.")
-            
-    except Exception as e: st.error(f"Ошибка загрузки пользователей: {e}")
+    # Вкладки для разделения управления базой и генерации отчетов
+    admin_tabs = st.tabs(["📊 Контроль и Специфика", "📋 Формирование ПМПК", "🗄️ Сырые данные"])
     
-    st.write("---")
-    
-    # 2. МОНИТОР ЗАПОЛНЯЕМОСТИ АНКЕТ ПО ДЕТЯМ
-    st.subheader("📊 Карта заполняемости анкет (Контроль консилиума)")
-    try:
-        t_kids = pd.read_sql_query("SELECT DISTINCT child_id FROM teacher_reports", engine)['child_id'].tolist()
-        p_kids = pd.read_sql_query("SELECT DISTINCT child_id FROM psychologist_reports", engine)['child_id'].tolist()
-        l_kids = pd.read_sql_query("SELECT DISTINCT child_id FROM speech_reports", engine)['child_id'].tolist()
-        d_kids = pd.read_sql_query("SELECT DISTINCT child_id FROM defect_reports", engine)['child_id'].tolist()
-        
-        all_kids = sorted(list(set(t_kids + p_kids + l_kids + d_kids)))
-        
-        if all_kids:
-            matrix_data = []
-            for kid in all_kids:
-                matrix_data.append({
-                    "Код ученика": kid,
-                    "Учитель": "🟩 Заполнено" if kid in t_kids else "❌ Нет данных",
-                    "Психолог": "🟩 Заполнено" if kid in p_kids else "❌ Нет данных",
-                    "Логопед": "🟩 Заполнено" if kid in l_kids else "❌ Нет данных",
-                    "Дефектолог": "🟩 Заполнено" if kid in d_kids else "❌ Нет данных"
-                })
-            matrix_df = pd.DataFrame(matrix_data)
-            st.dataframe(matrix_df, use_container_width=True)
+    # --- ВКЛАДКА 1: МОНИТОРИНГ И ПОЛЬЗОВАТЕЛИ ---
+    with admin_tabs[0]:
+        st.subheader("👥 Зарегистрированные специалисты")
+        try:
+            users_df = pd.read_sql_query('SELECT username as "ФИО Специалиста", role as "Роль / Кабинет", password as "Текущий Пароль" FROM users', engine)
+            st.dataframe(users_df, use_container_width=True)
             
-            # --- УДАЛЕНИЕ ОШИБОЧНЫХ АНКЕТ ---
-            st.markdown("### 🧹 Очистить ошибочные анкеты детей")
-            del_c1, del_c2 = st.columns(2)
-            kid_to_del = del_c1.selectbox("Выберите код ученика:", all_kids)
-            table_to_del = del_c2.selectbox("Из какого кабинета удалить запись?", ["Учитель", "Психолог", "Логопед", "Дефектолог"])
+            st.markdown("### 🗑️ Управление доступом сотрудников")
+            all_users_list = users_df["ФИО Специалиста"].tolist() if not users_df.empty else []
+            if all_users_list:
+                user_to_del = st.selectbox("Выберите ФИО специалиста, которого нужно удалить из системы:", all_users_list)
+                if st.button(f"❌ Полностью удалить доступ для {user_to_del}", type="primary"):
+                    with engine.begin() as conn:
+                        conn.execute(text("DELETE FROM users WHERE username = :u"), {"u": user_to_del})
+                    st.success(f"💥 Специалист {user_to_del} успешно удален из системы!")
+                    st.rerun()
+            else:
+                st.info("В системе пока нет зарегистрированных специалистов.")
+        except Exception as e: st.error(f"Ошибка загрузки пользователей: {e}")
+        
+        st.write("---")
+        
+        st.subheader("📊 Карта заполняемости анкет (Контроль консилиума)")
+        try:
+            t_kids = pd.read_sql_query("SELECT DISTINCT child_id FROM teacher_reports", engine)['child_id'].tolist()
+            p_kids = pd.read_sql_query("SELECT DISTINCT child_id FROM psychologist_reports", engine)['child_id'].tolist()
+            l_kids = pd.read_sql_query("SELECT DISTINCT child_id FROM speech_reports", engine)['child_id'].tolist()
+            d_kids = pd.read_sql_query("SELECT DISTINCT child_id FROM defect_reports", engine)['child_id'].tolist()
             
-            if st.button(f"🗑️ Удалить анкету ребенка {kid_to_del} из кабинета {table_to_del}"):
-                tbl_map = {
-                    "Учитель": "teacher_reports",
-                    "Психолог": "psychologist_reports",
-                    "Логопед": "speech_reports",
-                    "Дефектолог": "defect_reports"
-                }
-                actual_table = tbl_map[table_to_del]
-                with engine.begin() as conn:
-                    conn.execute(text(f"DELETE FROM {actual_table} WHERE child_id = :c"), {"c": kid_to_del})
-                st.success(f"🧹 Запись по ребенку {kid_to_del} успешно удалена из таблицы {table_to_del}!")
-                st.rerun()
+            all_kids = sorted(list(set(t_kids + p_kids + l_kids + d_kids)))
+            
+            if all_kids:
+                matrix_data = []
+                for kid in all_kids:
+                    matrix_data.append({
+                        "Код ученика": kid,
+                        "Учитель": "🟩 Заполнено" if kid in t_kids else "❌ Нет данных",
+                        "Психолог": "🟩 Заполнено" if kid in p_kids else "❌ Нет данных",
+                        "Логопед": "🟩 Заполнено" if kid in l_kids else "❌ Нет данных",
+                        "Дефектолог": "🟩 Заполнено" if kid in d_kids else "❌ Нет данных"
+                    })
+                matrix_df = pd.DataFrame(matrix_data)
+                st.dataframe(matrix_df, use_container_width=True)
                 
-        else:
-            st.info("В системе пока нет заполненных анкет ни на одного ребенка.")
-    except Exception as e: st.error(f"Ошибка расчета матрицы заполняемости: {e}")
-        
-    st.write("---")
-    st.subheader("🗄️ Просмотр сырых данных таблиц базы данных")
-    adm_tabs = st.tabs(["Учителя", "Психологи", "Логопеды", "Дефектологи"])
-    with adm_tabs[0]: st.dataframe(pd.read_sql_query("SELECT * FROM teacher_reports", engine), use_container_width=True)
-    with adm_tabs[1]: st.dataframe(pd.read_sql_query("SELECT * FROM psychologist_reports", engine), use_container_width=True)
-    with adm_tabs[2]: st.dataframe(pd.read_sql_query("SELECT * FROM speech_reports", engine), use_container_width=True)
-    with adm_tabs[3]: st.dataframe(pd.read_sql_query("SELECT * FROM defect_reports", engine), use_container_width=True)
+                st.markdown("### 🧹 Очистить ошибочные анкеты детей")
+                del_c1, del_c2 = st.columns(2)
+                kid_to_del = del_c1.selectbox("Выберите код ученика:", all_kids)
+                table_to_del = del_c2.selectbox("Из какого кабинета удалить запись?", ["Учитель", "Психолог", "Логопед", "Дефектолог"])
+                
+                if st.button(f"🗑️ Удалить анкету ребенка {kid_to_del} из кабинета {table_to_del}"):
+                    tbl_map = {
+                        "Учитель": "teacher_reports",
+                        "Психолог": "psychologist_reports",
+                        "Логопед": "speech_reports",
+                        "Дефектолог": "defect_reports"
+                    }
+                    actual_table = tbl_map[table_to_del]
+                    with engine.begin() as conn:
+                        conn.execute(text(f"DELETE FROM {actual_table} WHERE child_id = :c"), {"c": kid_to_del})
+                    st.success(f"🧹 Запись по ребенку {kid_to_del} успешно удалена из таблицы {table_to_del}!")
+                    st.rerun()
+            else:
+                st.info("В системе пока нет заполненных анкет ни на одного ребенка.")
+        except Exception as e: st.error(f"Ошибка расчета матрицы заполняемости: {e}")
 
-# --- РАБОЧАЯ ЗОНА СПЕЦИАЛИСТОВ ---
+    # --- ВКЛАДКА 2: ФОРМИРОВАНИЕ ПМПК (ПЕРЕНЕСЕНО СЮДА) ---
+    with admin_tabs[1]:
+        st.subheader("📋 Генерация комплексного отчета ПМПК")
+        try:
+            t_kids = pd.read_sql_query("SELECT DISTINCT child_id FROM teacher_reports", engine)['child_id'].tolist()
+            p_kids = pd.read_sql_query("SELECT DISTINCT child_id FROM psychologist_reports", engine)['child_id'].tolist()
+            l_kids = pd.read_sql_query("SELECT DISTINCT child_id FROM speech_reports", engine)['child_id'].tolist()
+            d_kids = pd.read_sql_query("SELECT DISTINCT child_id FROM defect_reports", engine)['child_id'].tolist()
+            all_available_kids = sorted(list(set(t_kids + p_kids + l_kids + d_kids)))
+        except Exception as e:
+            all_available_kids = []
+            st.error(f"Ошибка загрузки списка детей: {e}")
+
+        if all_available_kids:
+            selected_kid = st.selectbox("🎯 Выберите код ученика для формирования заключения ПМПК:", all_available_kids, key="adm_select_kid")
+            
+            if st.button("🤖 Сформировать официальное заключение ПМПК", type="primary", use_container_width=True):
+                t_rep = pd.read_sql_query("SELECT * FROM teacher_reports WHERE child_id = :c ORDER BY id DESC LIMIT 1", engine, params={"c": selected_kid})
+                p_rep = pd.read_sql_query("SELECT * FROM psychologist_reports WHERE child_id = :c ORDER BY id DESC LIMIT 1", engine, params={"c": selected_kid})
+                l_rep = pd.read_sql_query("SELECT * FROM speech_reports WHERE child_id = :c ORDER BY id DESC LIMIT 1", engine, params={"c": selected_kid})
+                d_rep = pd.read_sql_query("SELECT * FROM defect_reports WHERE child_id = :c ORDER BY id DESC LIMIT 1", engine, params={"c": selected_kid})
+                
+                st.write("---")
+                st.markdown(f"### 📄 Сводная экспертная оценка по ученику: **{selected_kid}**")
+                
+                score_table = []
+                if not t_rep.empty:
+                    score_table.append({"Сфера": "РАС (Педагог)", "Результат (Баллы)": f"{t_rep.iloc[0]['asd_score']} / 19", "Специалист": t_rep.iloc[0]['teacher_name']})
+                    score_table.append({"Сфера": "СДВГ (Педагог)", "Результат (Баллы)": f"{t_rep.iloc[0]['adhd_score']} / 15", "Специалист": t_rep.iloc[0]['teacher_name']})
+                if not p_rep.empty:
+                    score_table.append({"Сфера": "Психологическое развитие", "Результат (Баллы)": f"{p_rep.iloc[0]['total_score']} / 14", "Специалист": p_rep.iloc[0]['psych_name']})
+                if not l_rep.empty:
+                    score_table.append({"Сфера": "Речевое развитие (Логопед)", "Результат (Баллы)": f"{l_rep.iloc[0]['total_score']} / 7", "Специалист": l_rep.iloc[0]['speech_name']})
+                if not d_rep.empty:
+                    score_table.append({"Сфера": "Когнитивное развитие (Дефектолог)", "Результат (Баллы)": f"{d_rep.iloc[0]['total_score']} / 9", "Специалист": d_rep.iloc[0]['defect_name']})
+                
+                if score_table:
+                    st.table(pd.DataFrame(score_table))
+                    
+                    st.markdown("### 📋 Аналитическое заключение консилиума:")
+                    recs = []
+                    if st.session_state.language == "Русский":
+                        if not t_rep.empty and (t_rep.iloc[0]['asd_score'] >= 5 or t_rep.iloc[0]['adhd_score'] >= 5):
+                            recs.append("• **Рекомендация педагога:** Требуется адаптация учебной программы, введение визуального расписания и структурирование рабочего пространства.")
+                        if not p_rep.empty and p_rep.iloc[0]['total_score'] >= 4:
+                            recs.append("• **Рекомендация психолога:** Необходимы регулярные занятия по развитию эмоционально-волевой сферы и снижению уровня школьной тревожности.")
+                        if not l_rep.empty and l_rep.iloc[0]['total_score'] >= 3:
+                            recs.append("• **Рекомендация логопеда:** Рекомендован курс коррекции звукопроизношения, развития фонематического слуха и словарного запаса.")
+                        if not d_rep.empty and d_rep.iloc[0]['total_score'] >= 3:
+                            recs.append("• **Рекомендация дефектолога:** Необходима коррекция высших психических функций (ВПФ) и восполнение пробелов в академических знаниях.")
+                    else:  # Қазақша
+                        if not t_rep.empty and (t_rep.iloc[0]['asd_score'] >= 5 or t_rep.iloc[0]['adhd_score'] >= 5):
+                            recs.append("• **Педагог ұсынысы:** Оқу бағдарламасын бейімдеу, көрнекілік кестесін енгізу және жұмыс орнын жүйелеу қажет.")
+                        if not p_rep.empty and p_rep.iloc[0]['total_score'] >= 4:
+                            recs.append("• **Психолог ұсынысы:** Эмоционалды-ерік жігер аясын дамыту және мектеп мазасыздығын төмендету бойынша тұрақты сабақтар қажет.")
+                        if not l_rep.empty and l_rep.iloc[0]['total_score'] >= 3:
+                            recs.append("• **Логопед ұсынысы:** Дыбыстың айтылуын түзету, фонематикалық естуді және сөздік қорды дамыту курсы ұсынылады.")
+                        if not d_rep.empty and d_rep.iloc[0]['total_score'] >= 3:
+                            recs.append("• **Дефектолог ұсынысы:** Жоғары психикалық функцияларды (ЖПФ) түзету және академиялық білімдегі олқылықтардың орнын толтыру қажет.")
+                    
+                    if recs:
+                        for rec in recs: st.write(rec)
+                    else:
+                        st.write("✅ Показатели ребенка находятся в пределах условной нормы. Специализированных рекомендаций не требуется.")
+                    
+                    st.markdown("### ✍️ Дополнительные комментарии специалистов:")
+                    if not t_rep.empty and t_rep.iloc[0]['notes']:
+                        st.info(f"**Педагог:** {t_rep.iloc[0]['notes']}")
+                    if not p_rep.empty and p_rep.iloc[0]['notes']:
+                        st.info(f"**Психолог:** {p_rep.iloc[0]['notes']}")
+                    if not l_rep.empty and l_rep.iloc[0]['notes']:
+                        st.info(f"**Логопед:** {l_rep.iloc[0]['notes']}")
+                    if not d_rep.empty and d_rep.iloc[0]['notes']:
+                        st.info(f"**Дефектолог:** {d_rep.iloc[0]['notes']}")
+                else:
+                    st.warning("Нет данных для анализа.")
+        else:
+            st.info("В базе данных пока нет сохраненных анкет.")
+
+    # --- ВКЛАДКА 3: СЫРЫЕ ТАБЛИЦЫ ---
+    with admin_tabs[2]:
+        st.subheader("🗄️ Просмотр сырых данных таблиц базы данных")
+        raw_tabs = st.tabs(["Учителя", "Психологи", "Логопеды", "Дефектологи"])
+        with raw_tabs[0]: st.dataframe(pd.read_sql_query("SELECT * FROM teacher_reports", engine), use_container_width=True)
+        with raw_tabs[1]: st.dataframe(pd.read_sql_query("SELECT * FROM psychologist_reports", engine), use_container_width=True)
+        with raw_tabs[2]: st.dataframe(pd.read_sql_query("SELECT * FROM speech_reports", engine), use_container_width=True)
+        with raw_tabs[3]: st.dataframe(pd.read_sql_query("SELECT * FROM defect_reports", engine), use_container_width=True)
+
+# --- РАБОЧАЯ ЗОНА СПЕЦИАЛИСТОВ (БЕЗ ВКЛАДКИ ПМПК) ---
 else:
     st.title(f"🧩 Кабинет: {st.session_state.role}")
-    tabs = st.tabs([T['tab_survey'], T['tab_report'], T['tab_history']])
+    # У специалистов теперь ТОЛЬКО ДВЕ вкладки: Обследование и Архив
+    tabs = st.tabs([T['tab_survey'], T['tab_history']])
 
     # ================= 1. АНКЕТЫ =================
     with tabs[0]:
@@ -331,22 +411,17 @@ else:
         # --- КАБИНЕТ УЧИТЕЛЯ ---
         if st.session_state.role == "Учитель":
             st.subheader(T['teach_title'])
-            
             st.markdown("## 🧩 РАС")
             for i in range(0, 4):
                 st.markdown(f"#### {T['teach_secs'][i]}")
                 for idx, q in enumerate(T['teach_q'][i]):
-                    if st.checkbox(q, key=f"t_q_ras_{i}_{idx}"):
-                        asd_score += 1
-            
+                    if st.checkbox(q, key=f"t_q_ras_{i}_{idx}"): asd_score += 1
             st.markdown("<br><hr><br>", unsafe_allow_html=True)
-            
             st.markdown("## ⚡ СДВГ")
             for i in range(4, 7):
                 st.markdown(f"#### {T['teach_secs'][i]}")
                 for idx, q in enumerate(T['teach_q'][i]):
-                    if st.checkbox(q, key=f"t_q_adhd_{i}_{idx}"):
-                        adhd_score += 1
+                    if st.checkbox(q, key=f"t_q_adhd_{i}_{idx}"): adhd_score += 1
         
         # --- КАБИНЕТ ПСИХОЛОГА ---
         elif st.session_state.role == "Психолог":
@@ -354,8 +429,7 @@ else:
             for i, sec in enumerate(T['psych_secs']):
                 st.markdown(f"### {sec}")
                 for idx, q in enumerate(T['psych_q'][i]):
-                    if st.checkbox(q, key=f"p_q_{i}_{idx}"): 
-                        total_score += 1
+                    if st.checkbox(q, key=f"p_q_{i}_{idx}"): total_score += 1
                     
         # --- КАБИНЕТ ЛОГОПЕДА ---
         elif st.session_state.role == "Логопед":
@@ -363,8 +437,7 @@ else:
             for i, sec in enumerate(T['logo_secs']):
                 st.markdown(f"### {sec}")
                 for idx, q in enumerate(T['logo_q'][i]):
-                    if st.checkbox(q, key=f"l_q_{i}_{idx}"): 
-                        total_score += 1
+                    if st.checkbox(q, key=f"l_q_{i}_{idx}"): total_score += 1
                     
         # --- КАБИНЕТ ДЕФЕКТОЛОГА ---
         elif st.session_state.role == "Дефектолог":
@@ -372,8 +445,7 @@ else:
             for i, sec in enumerate(T['def_secs']):
                 st.markdown(f"### {sec}")
                 for idx, q in enumerate(T['def_q'][i]):
-                    if st.checkbox(q, key=f"d_q_{i}_{idx}"): 
-                        total_score += 1
+                    if st.checkbox(q, key=f"d_q_{i}_{idx}"): total_score += 1
 
         st.write("---")
         extra_notes = st.text_area(T['extra_notes_label'], placeholder=T['placeholder_notes'])
@@ -397,136 +469,31 @@ else:
             else:
                 st.error("Пожалуйста, введите код ребенка!")
 
-    # ================= 2. КОМПЛЕКСНЫЙ ОТЧЕТ ПМПК =================
+    # ================= 2. АРХИВ ЗАПИСЕЙ =================
     with tabs[1]:
-        st.subheader(T['tab_report'])
-        
-        # Загружаем списки детей для выбора
-        try:
-            t_kids = pd.read_sql_query("SELECT DISTINCT child_id FROM teacher_reports", engine)['child_id'].tolist()
-            p_kids = pd.read_sql_query("SELECT DISTINCT child_id FROM psychologist_reports", engine)['child_id'].tolist()
-            l_kids = pd.read_sql_query("SELECT DISTINCT child_id FROM speech_reports", engine)['child_id'].tolist()
-            d_kids = pd.read_sql_query("SELECT DISTINCT child_id FROM defect_reports", engine)['child_id'].tolist()
-            all_available_kids = sorted(list(set(t_kids + p_kids + l_kids + d_kids)))
-        except Exception as e:
-            all_available_kids = []
-            st.error(f"Ошибка загрузки списка детей: {e}")
-
-        if all_available_kids:
-            selected_kid = st.selectbox("🎯 Выберите код ученика для формирования заключения ПМПК:", all_available_kids)
-            
-            if st.button(T['report_gen'], type="primary", use_container_width=True):
-                # Достаем данные по конкретному ребенку
-                t_rep = pd.read_sql_query("SELECT * FROM teacher_reports WHERE child_id = :c ORDER BY id DESC LIMIT 1", engine, params={"c": selected_kid})
-                p_rep = pd.read_sql_query("SELECT * FROM psychologist_reports WHERE child_id = :c ORDER BY id DESC LIMIT 1", engine, params={"c": selected_kid})
-                l_rep = pd.read_sql_query("SELECT * FROM speech_reports WHERE child_id = :c ORDER BY id DESC LIMIT 1", engine, params={"c": selected_kid})
-                d_rep = pd.read_sql_query("SELECT * FROM defect_reports WHERE child_id = :c ORDER BY id DESC LIMIT 1", engine, params={"c": selected_kid})
-                
-                st.write("---")
-                st.markdown(f"### 📄 Сводная экспертная оценка по ученику: **{selected_kid}**")
-                
-                # Таблица баллов
-                score_table = []
-                if not t_rep.empty:
-                    score_table.append({"Сфера": "РАС (Педагог)", "Результат (Баллы)": f"{t_rep.iloc[0]['asd_score']} / 19", "Специалист": t_rep.iloc[0]['teacher_name']})
-                    score_table.append({"Сфера": "СДВГ (Педагог)", "Результат (Баллы)": f"{t_rep.iloc[0]['adhd_score']} / 15", "Специалист": t_rep.iloc[0]['teacher_name']})
-                if not p_rep.empty:
-                    score_table.append({"Сфера": "Психологическое развитие", "Результат (Баллы)": f"{p_rep.iloc[0]['total_score']} / 14", "Специалист": p_rep.iloc[0]['psych_name']})
-                if not l_rep.empty:
-                    score_table.append({"Сфера": "Речевое развитие (Логопед)", "Результат (Баллы)": f"{l_rep.iloc[0]['total_score']} / 7", "Специалист": l_rep.iloc[0]['speech_name']})
-                if not d_rep.empty:
-                    score_table.append({"Сфера": "Когнитивное развитие (Дефектолог)", "Результат (Баллы)": f"{d_rep.iloc[0]['total_score']} / 9", "Специалист": d_rep.iloc[0]['defect_name']})
-                
-                if score_table:
-                    st.table(pd.DataFrame(score_table))
-                    
-                    # Генерация автоматического заключения на основе баллов
-                    st.markdown("### 📋 Аналитическое заключение консилиума:")
-                    
-                    recs = []
-                    if st.session_state.language == "Русский":
-                        if not t_rep.empty and (t_rep.iloc[0]['asd_score'] >= 5 or t_rep.iloc[0]['adhd_score'] >= 5):
-                            recs.append("• **Рекомендация педагога:** Требуется адаптация учебной программы, введение визуального расписания и структурирование рабочего пространства.")
-                        if not p_rep.empty and p_rep.iloc[0]['total_score'] >= 4:
-                            recs.append("• **Рекомендация психолога:** Необходимы регулярные занятия по развитию эмоционально-волевой сферы и снижению уровня школьной тревожности.")
-                        if not l_rep.empty and l_rep.iloc[0]['total_score'] >= 3:
-                            recs.append("• **Рекомендация логопеда:** Рекомендован курс коррекции звукопроизношения, развития фонематического слуха и словарного запаса.")
-                        if not d_rep.empty and d_rep.iloc[0]['total_score'] >= 3:
-                            recs.append("• **Рекомендация дефектолога:** Необходима коррекция высших психических функций (ВПФ) и восполнение пробелов в академических знаниях.")
-                    else:  # Қазақша
-                        if not t_rep.empty and (t_rep.iloc[0]['asd_score'] >= 5 or t_rep.iloc[0]['adhd_score'] >= 5):
-                            recs.append("• **Педагог ұсынысы:** Оқу бағдарламасын бейімдеу, көрнекілік кестесін енгізу және жұмыс орнын жүйелеу қажет.")
-                        if not p_rep.empty and p_rep.iloc[0]['total_score'] >= 4:
-                            recs.append("• **Психолог ұсынысы:** Эмоционалды-ерік жігер аясын дамыту және мектеп мазасыздығын төмендету бойынша тұрақты сабақтар қажет.")
-                        if not l_rep.empty and l_rep.iloc[0]['total_score'] >= 3:
-                            recs.append("• **Логопед ұсынысы:** Дыбыстың айтылуын түзету, фонематикалық естуді және сөздік қорды дамыту курсы ұсынылады.")
-                        if not d_rep.empty and d_rep.iloc[0]['total_score'] >= 3:
-                            recs.append("• **Дефектолог ұсынысы:** Жоғары психикалық функцияларды (ЖПФ) түзету және академиялық білімдегі олқылықтардың орнын толтыру қажет.")
-                    
-                    if recs:
-                        for rec in recs:
-                            st.write(rec)
-                    else:
-                        st.write("✅ Показатели ребенка находятся в пределах условной нормы. Специализированных рекомендаций не требуется.")
-                    
-                    # Вывод заметок специалистов
-                    st.markdown("### ✍️ Дополнительные комментарии специалистов:")
-                    if not t_rep.empty and t_rep.iloc[0]['notes']:
-                        st.info(f"**Педагог:** {t_rep.iloc[0]['notes']}")
-                    if not p_rep.empty and p_rep.iloc[0]['notes']:
-                        st.info(f"**Психолог:** {p_rep.iloc[0]['notes']}")
-                    if not l_rep.empty and l_rep.iloc[0]['notes']:
-                        st.info(f"**Логопед:** {l_rep.iloc[0]['notes']}")
-                    if not d_rep.empty and d_rep.iloc[0]['notes']:
-                        st.info(f"**Дефектолог:** {d_rep.iloc[0]['notes']}")
-                else:
-                    st.warning("Нет данных для анализа.")
-        else:
-            st.info("В базе данных пока нет сохраненных анкет.")
-
-    # ================= 3. АРХИВ ЗАПИСЕЙ =================
-    with tabs[2]:
         st.subheader(T['tab_history'])
-        
-        # Создаем подразделы для каждого кабинета
         arch_teach, arch_psych, arch_logo, arch_def = st.tabs(["🏫 Учителя", "🧠 Психологи", "🗣 Логопеды", "🎓 Дефектологи"])
         
         with arch_teach:
             try:
                 df_t = pd.read_sql_query("SELECT date as \"Дата\", teacher_name as \"ФИО Специалиста\", child_id as \"Код ребенка\", asd_score as \"Баллы РАС\", adhd_score as \"Баллы СДВГ\", notes as \"Комментарий\" FROM teacher_reports ORDER BY id DESC", engine)
-                if not df_t.empty:
-                    st.dataframe(df_t, use_container_width=True)
-                else:
-                    st.info("Нет записей в архиве учителей.")
-            except Exception as e:
-                st.error(f"Ошибка загрузки архива педагогов: {e}")
+                st.dataframe(df_t, use_container_width=True) if not df_t.empty else st.info("Нет записей в архиве учителей.")
+            except Exception as e: st.error(f"Ошибка: {e}")
                 
         with arch_psych:
             try:
                 df_p = pd.read_sql_query("SELECT date as \"Дата\", psych_name as \"ФИО Специалиста\", child_id as \"Код ребенка\", total_score as \"Общий балл\", notes as \"Комментарий\" FROM psychologist_reports ORDER BY id DESC", engine)
-                if not df_p.empty:
-                    st.dataframe(df_p, use_container_width=True)
-                else:
-                    st.info("Нет записей в архиве психологов.")
-            except Exception as e:
-                st.error(f"Ошибка загрузки архива психологов: {e}")
+                st.dataframe(df_p, use_container_width=True) if not df_p.empty else st.info("Нет записей в архиве психологов.")
+            except Exception as e: st.error(f"Ошибка: {e}")
                 
         with arch_logo:
             try:
                 df_l = pd.read_sql_query("SELECT date as \"Дата\", speech_name as \"ФИО Специалиста\", child_id as \"Код ребенка\", total_score as \"Общий балл\", notes as \"Комментарий\" FROM speech_reports ORDER BY id DESC", engine)
-                if not df_l.empty:
-                    st.dataframe(df_l, use_container_width=True)
-                else:
-                    st.info("Нет записей в архиве логопедов.")
-            except Exception as e:
-                st.error(f"Ошибка загрузки архива логопедов: {e}")
+                st.dataframe(df_l, use_container_width=True) if not df_l.empty else st.info("Нет записей в архиве логопедов.")
+            except Exception as e: st.error(f"Ошибка: {e}")
                 
         with arch_def:
             try:
                 df_d = pd.read_sql_query("SELECT date as \"Дата\", defect_name as \"ФИО Специалиста\", child_id as \"Код ребенка\", total_score as \"Общий балл\", notes as \"Комментарий\" FROM defect_reports ORDER BY id DESC", engine)
-                if not df_d.empty:
-                    st.dataframe(df_d, use_container_width=True)
-                else:
-                    st.info("Нет записей в архиве дефектологов.")
-            except Exception as e:
-                st.error(f"Ошибка загрузки архива дефектологов: {e}")
+                st.dataframe(df_d, use_container_width=True) if not df_d.empty else st.info("Нет записей в архиве дефектологов.")
+            except Exception as e: st.error(f"Ошибка: {e}")
